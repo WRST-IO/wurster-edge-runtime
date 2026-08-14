@@ -1,0 +1,7 @@
+/build/
+/out/
+*.tar.gz
+*.zip
+*.sha256
+__pycache__/
+*.pyc

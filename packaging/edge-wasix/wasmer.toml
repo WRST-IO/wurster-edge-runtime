@@ -1,0 +1,33 @@
+[package]
+entrypoint = "edge"
+name = "wrst-io/wurster-edge-wasix"
+version = "0.1.0-dev.1"
+description = "Pinned engine-free Edge.js WASIX guest for Wurster Pigsty"
+
+[[module]]
+name = "edgejs"
+source = "./edgejs.wasm"
+
+[[command]]
+name = "edge"
+module = "edgejs"
+runner = "https://webc.org/runner/wasi"
+
+[command.annotations.wasi]
+atom = "edgejs"
+
+[[command]]
+name = "edgejs"
+module = "edgejs"
+runner = "https://webc.org/runner/wasi"
+
+[command.annotations.wasi]
+atom = "edgejs"
+
+[[command]]
+name = "node"
+module = "edgejs"
+runner = "https://webc.org/runner/wasi"
+
+[command.annotations.wasi]
+atom = "edgejs"

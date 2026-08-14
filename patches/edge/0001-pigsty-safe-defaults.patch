@@ -1,0 +1,16 @@
+diff --git a/src/edge_compat_exec.cc b/src/edge_compat_exec.cc
+index 67a9226..abbb99b 100644
+--- a/src/edge_compat_exec.cc
++++ b/src/edge_compat_exec.cc
+@@ -102,8 +102,10 @@ std::vector<std::string> BuildDefaultSafeModeCommand(std::string_view wasmer_bin
+       "run",
++      "--llvm",
+       "--experimental-napi",
+       resolved_wasmer_package,
+       "--volume=.",
+-      "--net",
++      "--env",
++      "HOME=/tmp",
+       "--",
+   };
+ }

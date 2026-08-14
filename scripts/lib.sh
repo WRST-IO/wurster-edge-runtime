@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root() {
+  cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
+}
+
+lock_value() {
+  local lock_file="$1"
+  local dotted_path="$2"
+  python3 - "$lock_file" "$dotted_path" <<'PY'
+import json
+import sys
+
+value = json.load(open(sys.argv[1], encoding="utf-8"))
+for part in sys.argv[2].split("."):
+    value = value[part]
+if isinstance(value, (dict, list)):
+    print(json.dumps(value, separators=(",", ":")))
+else:
+    print(value)
+PY
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || {
+    printf 'error: required command not found: %s\n' "$1" >&2
+    exit 1
+  }
+}
+
+require_linux_amd64() {
+  local kernel machine
+  kernel="$(uname -s)"
+  machine="$(uname -m)"
+  if [[ "$kernel" != "Linux" || "$machine" != "x86_64" ]]; then
+    printf 'error: supported build host is Linux x86_64, got %s %s\n' "$kernel" "$machine" >&2
+    exit 1
+  fi
+}
+
+checkout_pinned_repo() {
+  local repository="$1"
+  local commit="$2"
+  local destination="$3"
+
+  if [[ -d "$destination/.git" ]]; then
+    local actual
+    actual="$(git -C "$destination" rev-parse HEAD)"
+    if [[ "$actual" != "$commit" ]]; then
+      printf 'error: %s exists at %s, expected %s\n' "$destination" "$actual" "$commit" >&2
+      exit 1
+    fi
+    return
+  fi
+  if [[ -e "$destination" ]]; then
+    printf 'error: refusing to overwrite non-repository path: %s\n' "$destination" >&2
+    exit 1
+  fi
+
+  install -d "$(dirname "$destination")"
+  git init -q "$destination"
+  git -C "$destination" remote add origin "$repository"
+  git -C "$destination" fetch --depth 1 origin "$commit"
+  git -C "$destination" checkout -q --detach FETCH_HEAD
+  test "$(git -C "$destination" rev-parse HEAD)" = "$commit"
+}

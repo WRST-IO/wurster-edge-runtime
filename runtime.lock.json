@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "bundle": {
+    "name": "wurster-edge-runtime",
+    "version": "0.1.0-dev.1",
+    "target": "linux-amd64"
+  },
+  "sources": {
+    "edgejs": {
+      "repository": "https://github.com/wasmerio/edgejs.git",
+      "commit": "1ca99ab4ff3d74bf5940177eb007457612d398e3"
+    },
+    "wasmer": {
+      "repository": "https://github.com/wasmerio/wasmer.git",
+      "commit": "9b8fdf1720d6671a3de76aa8727f84536979104f"
+    },
+    "napi": {
+      "repository": "https://github.com/wasmerio/napi.git",
+      "commit": "c5b66fb9f5b1b997d5bdd463dc1a80bb174d4730"
+    }
+  },
+  "toolchain": {
+    "build_host": "ubuntu-24.04-amd64",
+    "rust": "1.95",
+    "source_date_epoch": 1786578280,
+    "llvm": {
+      "version": "22.1.8",
+      "url": "https://github.com/wasmerio/llvm-custom-builds/releases/download/22.x/llvm-linux-amd64.tar.xz",
+      "sha256": "5fb1c687c5e895d517a23e7aabea9ec3557e3a3e33f8a8d3a8d21395157b3906"
+    },
+    "wasixcc_action_commit": "8a505d4605b15fd466a3881d286582b23e4ffecb",
+    "wasixcc_version": "v0.4.3",
+    "wasixcc_sysroot": "v2026-07-30.1",
+    "wasmer_features": [
+      "cranelift",
+      "llvm",
+      "singlepass",
+      "wasm-c-api",
+      "napi-v8",
+      "wasmer-artifact-create",
+      "static-artifact-create",
+      "wasmer-artifact-load",
+      "static-artifact-load"
+    ]
+  },
+  "upstream_evidence": {
+    "edge_ci_run": "https://github.com/wasmerio/edgejs/actions/runs/31651995923",
+    "edge_v8_wasix_job": "https://github.com/wasmerio/edgejs/actions/runs/31651995923/job/94298179900",
+    "selected_node_tests": 1676,
+    "selected_node_test_failures": 0
+  }
+}
