@@ -34,6 +34,8 @@ Windows also selects OpenSSL's vendored `no-asm` source set because upstream's
 NASM-formatted VC-WIN64A files are otherwise sent to MSVC's incompatible MASM
 assembler. The Windows C/C++ build explicitly selects UTF-8 source handling so
 MSVC compiles ICU's Unicode literals without locale-dependent interpretation.
+It also enables MSVC's conforming `__cplusplus` value and exception unwind
+semantics required by the pinned V8 C++20 headers.
 The Darwin Intel host is built natively. Its V8 dependency is
 compiled from the pinned V8 revision with the pinned upstream custom-build
 patchset because no Darwin x86_64 binary exists in the V8 11.9.7 release.

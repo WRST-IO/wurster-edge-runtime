@@ -88,7 +88,7 @@ try {
     & cmake -S (Join-Path $SourceRoot "edgejs") -B $EdgeBuild -G Ninja `
         -DCMAKE_BUILD_TYPE=Release `
         -DCMAKE_C_FLAGS=/utf-8 `
-        -DCMAKE_CXX_FLAGS=/utf-8 `
+        "-DCMAKE_CXX_FLAGS=/utf-8 /Zc:__cplusplus /EHsc" `
         -DEDGE_BUILD_NAPI_TESTS=OFF
     & cmake --build $EdgeBuild --parallel $Jobs
 
