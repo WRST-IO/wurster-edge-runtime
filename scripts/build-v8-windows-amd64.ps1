@@ -93,6 +93,17 @@ $env:DEPOT_TOOLS_WIN_TOOLCHAIN = "0"
 & git config --global core.autocrlf false
 & git config --global core.longpaths true
 
+# A pinned depot_tools checkout intentionally has no generated git.bat. The
+# normal auto-update path creates it as a side effect, but auto-update must stay
+# disabled for a reproducible build. Run only the pinned Windows bootstrap,
+# which installs the manifest-locked CIPD tools and renders the Git wrapper.
+& (Join-Path $DepotRoot "bootstrap/win_tools.bat")
+$DepotGit = Join-Path $DepotRoot "git.bat"
+if (-not (Test-Path -LiteralPath $DepotGit)) {
+    throw "pinned depot_tools bootstrap did not generate git.bat"
+}
+& $DepotGit --version
+
 $Synced = $false
 for ($Attempt = 1; $Attempt -le 3 -and -not $Synced; $Attempt++) {
     if (Test-Path -LiteralPath $CheckoutRoot) {
