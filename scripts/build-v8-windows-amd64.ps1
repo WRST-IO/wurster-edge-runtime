@@ -67,7 +67,7 @@ function Assert-V8Version {
     )
     foreach ($Pattern in $Patterns) {
         if (-not $Header.Contains($Pattern)) {
-            throw "V8 header version does not match pinned $Version: missing $Pattern"
+            throw "V8 header version does not match pinned ${Version}: missing $Pattern"
         }
     }
 }

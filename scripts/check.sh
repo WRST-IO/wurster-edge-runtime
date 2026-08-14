@@ -22,6 +22,22 @@ python3 -m py_compile \
   "$root/scripts/generate-rust-notices.py" \
   "$root/scripts/verify-release-set.py" \
   "$root/scripts/verify-manifest.py"
+python3 - "$root" <<'PY'
+import pathlib
+import re
+import sys
+
+root = pathlib.Path(sys.argv[1])
+invalid = re.compile(r"\$(?!(?:env|script|global|local|private|using):)[A-Za-z_][A-Za-z0-9_]*:")
+for path in sorted((root / "scripts").glob("*.ps1")):
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        match = invalid.search(line)
+        if match:
+            raise SystemExit(
+                f"{path}:{number}: ambiguous PowerShell interpolation {match.group(0)!r}; "
+                "use ${name}:"
+            )
+PY
 bash -n "$root"/scripts/*.sh
 
 if command -v shellcheck >/dev/null 2>&1; then
