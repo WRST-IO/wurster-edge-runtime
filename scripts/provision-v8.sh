@@ -18,7 +18,10 @@ if [[ -f "$v8_root/include/v8.h" && -f "$v8_root/lib/libv8.a" ]]; then
 fi
 
 if [[ "$target" == "darwin-amd64" ]]; then
-  "$script_dir/build-v8-darwin-amd64.sh" "$v8_root"
+  # provision-v8.sh is commonly used inside command substitution. Keep the
+  # expensive V8 build log on stderr so stdout contains exactly one thing:
+  # the resolved V8 SDK path printed below.
+  "$script_dir/build-v8-darwin-amd64.sh" "$v8_root" >&2
   printf '%s\n' "$v8_root"
   exit 0
 fi

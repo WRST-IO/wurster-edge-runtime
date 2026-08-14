@@ -19,6 +19,11 @@ if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -
     throw "Windows amd64 build requires an AMD64 Windows host"
 }
 
+$SystemNinja = (Get-Command ninja.exe -ErrorAction Stop).Source
+if ($SystemNinja -match '[\\/]depot_tools[\\/]') {
+    throw "Refusing to use depot_tools Ninja for Edge.js: $SystemNinja"
+}
+
 Push-Location $Root
 try {
     & bash ./scripts/fetch-sources.sh build/src
@@ -43,16 +48,29 @@ try {
     } else {
         Join-Path $Root "build/v8-$($Lock.toolchain.v8.version)-windows-amd64"
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $V8Root "include/v8.h")) -or
-        -not (Test-Path -LiteralPath (Join-Path $V8Root "lib/v8.lib"))) {
-        & "$ScriptDir/build-v8-windows-amd64.ps1" -Output $V8Root
+    $PathBeforeV8 = $env:Path
+    try {
+        if (-not (Test-Path -LiteralPath (Join-Path $V8Root "include/v8.h")) -or
+            -not (Test-Path -LiteralPath (Join-Path $V8Root "lib/v8.lib"))) {
+            & "$ScriptDir/build-v8-windows-amd64.ps1" -Output $V8Root
+        }
+    } finally {
+        # depot_tools prepends itself to PATH while building V8. Never let that
+        # leak into the following CMake configure, where its POSIX `ninja`
+        # wrapper can shadow the runner's native ninja.exe.
+        $env:Path = $PathBeforeV8
     }
     $env:NAPI_V8_INCLUDE_DIR = Join-Path $V8Root "include"
     $env:NAPI_V8_LIBRARY = Join-Path $V8Root "lib/v8.lib"
     $env:NAPI_V8_BUILD_METHOD = "local"
 
     $EdgeBuild = Join-Path $SourceRoot "edgejs/build-edge"
+    if (Test-Path -LiteralPath $EdgeBuild) {
+        Remove-Item -LiteralPath $EdgeBuild -Recurse -Force
+    }
+    & $SystemNinja --version
     & cmake -S (Join-Path $SourceRoot "edgejs") -B $EdgeBuild -G Ninja `
+        "-DCMAKE_MAKE_PROGRAM:FILEPATH=$SystemNinja" `
         -DCMAKE_BUILD_TYPE=Release `
         -DCMAKE_C_FLAGS=/utf-8 `
         "-DCMAKE_CXX_FLAGS=/utf-8 /Zc:__cplusplus /EHsc" `
