@@ -50,10 +50,21 @@ require_darwin_arm64() {
   fi
 }
 
+require_darwin_amd64() {
+  local kernel machine
+  kernel="$(uname -s)"
+  machine="$(uname -m)"
+  if [[ "$kernel" != "Darwin" || "$machine" != "x86_64" ]]; then
+    printf 'error: supported build host is Darwin x86_64, got %s %s\n' "$kernel" "$machine" >&2
+    exit 1
+  fi
+}
+
 host_target() {
   case "$(uname -s):$(uname -m)" in
     Linux:x86_64) printf '%s\n' linux-amd64 ;;
     Darwin:arm64) printf '%s\n' darwin-arm64 ;;
+    Darwin:x86_64) printf '%s\n' darwin-amd64 ;;
     *)
       printf 'error: unsupported host: %s %s\n' "$(uname -s)" "$(uname -m)" >&2
       exit 1

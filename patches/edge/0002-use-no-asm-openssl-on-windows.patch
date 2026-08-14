@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000002 Mon Sep 17 00:00:00 2001
+From: WRST.IO <runtime@wrst.io>
+Date: Fri, 14 Aug 2026 12:00:00 +0200
+Subject: [PATCH] build: use vendored OpenSSL no-asm sources on Windows
+
+The vendored VC-WIN64A asm files are emitted in NASM syntax, while Edge's
+CMake integration enables MASM and passes them to ml64.  Select OpenSSL's
+already-generated no-asm source set on Windows so the native Edge host builds
+reliably with the supported MSVC toolchain.
+---
+ scripts/generate_vendored_openssl_cmake.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/scripts/generate_vendored_openssl_cmake.py b/scripts/generate_vendored_openssl_cmake.py
+index d1711e0..78dc868 100755
+--- a/scripts/generate_vendored_openssl_cmake.py
++++ b/scripts/generate_vendored_openssl_cmake.py
+@@ -89,7 +89,7 @@ def split_flag_groups(items):
+ 
+ 
+ def resolve_mode(arch_dir: pathlib.Path, target_os: str, target_arch: str) -> str:
+-    if target_os == "win" and target_arch == "arm64":
++    if target_os == "win":
+         preferred = ["no-asm"]
+     else:
+         preferred = ["asm", "asm_avx2", "no-asm"]
+@@ -225,6 +225,8 @@ def main():
+     common = common_block(deps_root / "openssl_common.gypi", args.target_os, args.compiler_family)
+     bundle_defs = bundle_defines(deps_root / "openssl.gyp", args.modules_dir)
+ 
++    if mode == "no-asm":
++        arch_block["defines"].append("OPENSSL_NO_ASM")
+     base_defines = dedupe(bundle_defs + common["defines"] + arch_block["defines"])
+     base_cflags = dedupe(
+         filter_compile_options(
+-- 
+2.50.1

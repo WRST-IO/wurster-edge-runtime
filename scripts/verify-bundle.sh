@@ -34,6 +34,10 @@ case "$target" in
     file "$edge" | grep -q 'Mach-O 64-bit executable arm64'
     file "$wasmer" | grep -q 'Mach-O 64-bit executable arm64'
     ;;
+  darwin-amd64)
+    file "$edge" | grep -q 'Mach-O 64-bit executable x86_64'
+    file "$wasmer" | grep -q 'Mach-O 64-bit executable x86_64'
+    ;;
 esac
 
 version_detail="$($wasmer --version -v 2>&1)"

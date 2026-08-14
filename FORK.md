@@ -30,6 +30,12 @@ spawning, enables Wasmer's NAPI-V8 host on Windows, adds the published Windows
 V8 library layout to both NAPI resolvers, and selects Wasmer's Windows V8 WASM
 backend rather than LLVM.
 
+Windows also selects OpenSSL's vendored `no-asm` source set because upstream's
+NASM-formatted VC-WIN64A files are otherwise sent to MSVC's incompatible MASM
+assembler. The Darwin Intel host is built natively. Its V8 dependency is
+compiled from the pinned V8 revision with the pinned upstream custom-build
+patchset because no Darwin x86_64 binary exists in the V8 11.9.7 release.
+
 The local WASIX package manifest removes upstream references to absent
 `quickjs-wasm/etc` and `quickjs-wasm/pnpm` paths and contains no registry or CDN
 dependency. WurstFS projection is deliberately not implemented in this fork.

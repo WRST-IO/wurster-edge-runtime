@@ -14,7 +14,14 @@ Built natively on GitHub's `macos-15` arm64 runner. It uses the same tested
 runtime, filesystem, manifest, PATH-poison, and safe-command tests run on macOS.
 Linux-only `strace` and network-namespace gates are not claimed on Darwin.
 
-macOS Intel is intentionally outside the Wurster release matrix.
+## macOS Intel
+
+Built natively on GitHub's `macos-15-intel` x86_64 runner. This is a real Intel
+build: both binaries must be Mach-O x86_64. It uses the same guest as every
+other host. Because upstream V8 11.9.7 does not publish a Darwin x86_64 asset,
+CI builds its pinned V8 commit with the pinned `v8-custom-builds` patchset and
+pinned depot_tools revision; no ARM bundle or Rosetta compatibility substitution
+is accepted.
 
 ## Windows amd64
 
@@ -55,3 +62,16 @@ executables with Windows Firewall, poisons `PATH` with Node/cmd/PowerShell
 probes, and exercises parent plus directory-junction escape attempts. A failed
 Windows job prevents the entire tagged release; Linux/macOS-only output is not
 considered a final Wurster Edge Runtime release.
+
+## Portable core, Web, and mobile
+
+`wurster-edge-runtime-core.tar.gz` is supported and contains the tested
+platform-neutral guest as `wurster-edgejs.wasm`, its manifest, compatibility
+lock, and licenses. It is not a host by itself.
+
+`web`, `ios-arm64`, and `android-arm64` are reserved host identifiers, not
+supported targets in this release. Web still lacks a packaged and gated browser
+WASIX/N-API/Worker host. Mobile packaging remains deliberately unspecified.
+All Edge-specific work for those hosts belongs in this repository under the
+logical contract in [HOST_CONTRACT.md](HOST_CONTRACT.md), so Wurster-Lab never
+needs to implement Edge or N-API internals.

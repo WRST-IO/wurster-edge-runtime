@@ -11,6 +11,17 @@ target="$(host_target)"
 version="$(lock_value "$lock" toolchain.v8.version)"
 download_root="${WURSTER_BUILD_DOWNLOAD_ROOT:-$root/build/downloads}"
 v8_root="${WURSTER_V8_ROOT:-$root/build/v8-$version-$target}"
+if [[ -f "$v8_root/include/v8.h" && -f "$v8_root/lib/libv8.a" ]]; then
+  printf '%s\n' "$v8_root"
+  exit 0
+fi
+
+if [[ "$target" == "darwin-amd64" ]]; then
+  "$script_dir/build-v8-darwin-amd64.sh" "$v8_root"
+  printf '%s\n' "$v8_root"
+  exit 0
+fi
+
 archive="$download_root/v8-$target.tar.xz"
 expected_sha256="$(lock_value "$lock" "toolchain.v8.targets.$target.sha256")"
 url="$(lock_value "$lock" "toolchain.v8.targets.$target.url")"
@@ -18,11 +29,6 @@ url="$(lock_value "$lock" "toolchain.v8.targets.$target.url")"
 for command in curl install mktemp tar; do
   require_command "$command"
 done
-
-if [[ -f "$v8_root/include/v8.h" && -f "$v8_root/lib/libv8.a" ]]; then
-  printf '%s\n' "$v8_root"
-  exit 0
-fi
 if [[ -e "$v8_root" ]]; then
   printf 'error: incomplete V8 directory exists: %s\n' "$v8_root" >&2
   exit 1

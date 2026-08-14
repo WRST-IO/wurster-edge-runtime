@@ -17,14 +17,16 @@ delta, and the update policy.
 | --- | --- | --- |
 | `wurster-edge-runtime-linux-amd64.tar.gz` | release-gated | Linux x86-64 |
 | `wurster-edge-runtime-darwin-arm64.tar.gz` | release-gated | macOS Apple Silicon |
+| `wurster-edge-runtime-darwin-amd64.tar.gz` | release-gated | macOS Intel x86-64 |
 | `wurster-edge-runtime-windows-amd64.zip` | release-gated | Windows x86-64 |
-| macOS Intel | out of scope | not published |
+| `wurster-edge-runtime-core.tar.gz` | release-gated | portable WASIX guest |
 
 “Release-gated” means the archive is published only if that exact bundle passes
-the native Pigsty safe-mode acceptance suite. Windows is a mandatory target,
-not an optional follow-up. The WRST.IO patch set completes the unfinished
-Windows paths in Edge's safe launcher, Wasmer's NAPI feature selection, and the
-shared NAPI V8 resolver. Details are in [docs/PLATFORMS.md](docs/PLATFORMS.md).
+the native Pigsty safe-mode acceptance suite. Windows and both native macOS
+architectures are mandatory desktop targets. The WRST.IO patch set completes
+the unfinished Windows paths in Edge's safe launcher, Wasmer's NAPI feature
+selection, and the shared NAPI V8 resolver. Details are in
+[docs/PLATFORMS.md](docs/PLATFORMS.md).
 
 ## Compatibility lock
 
@@ -35,7 +37,7 @@ shared NAPI V8 resolver. Details are in [docs/PLATFORMS.md](docs/PLATFORMS.md).
 | N-API | `c5b66fb9f5b1b997d5bdd463dc1a80bb174d4730` | Identical ABI implementation in Edge and Wasmer |
 | wasixcc | `v0.4.3`, sysroot `v2026-07-30.1` | WASIX guest compiler |
 | LLVM | `22.1.8`, per-target checksums | Safe-mode execution backend |
-| V8 host build | `11.9.7`, per-target checksums | Edge and Wasmer NAPI-V8 bridge |
+| V8 host build | `11.9.7`, pinned binary hashes or pinned source build | Edge and Wasmer NAPI-V8 bridge |
 
 `runtime.lock.json` is authoritative. Bundle versions are independent of Edge
 and Wasmer versions and select one complete compatibility lock.
@@ -49,7 +51,9 @@ only after all pass, creates a GitHub Release containing:
 ```text
 wurster-edge-runtime-linux-amd64.tar.gz
 wurster-edge-runtime-darwin-arm64.tar.gz
+wurster-edge-runtime-darwin-amd64.tar.gz
 wurster-edge-runtime-windows-amd64.zip
+wurster-edge-runtime-core.tar.gz
 SHA256SUMS
 ```
 
@@ -60,6 +64,8 @@ platform release cannot be created by the workflow.
 
 Maintainer steps, version invariants, and recovery behavior are documented in
 [docs/RELEASING.md](docs/RELEASING.md).
+The machine-readable consumer fields are defined in
+[docs/MANIFEST.md](docs/MANIFEST.md).
 
 ## Bundle layout
 
@@ -76,9 +82,19 @@ wurster-edge-runtime-<target>/
   README.md
 ```
 
-The WASIX guest is built once in the Linux job and reused byte-for-byte by the
-macOS and Windows host builds. Native `edge` and `wasmer` binaries are built and
-tested on their target operating system.
+The portable archive instead has one top-level `wurster-edge-runtime-core/`
+directory containing `wurster-edgejs.wasm`, `manifest.json`,
+`runtime.lock.json`, and `LICENSES/`.
+
+The WASIX guest is built once and reused byte-for-byte by all desktop hosts.
+The core archive publishes those same bytes as `wurster-edgejs.wasm` with its
+compatibility lock. Every platform manifest records the guest SHA-256, and the
+release job compares all five final archives before publication. Native `edge`
+and `wasmer` binaries are built and tested on their target operating system.
+
+The host/guest boundary is intentionally independent of process spawning.
+Desktop uses native executables today; future browser and embedded mobile hosts
+remain Edge-runtime responsibilities. See [docs/HOST_CONTRACT.md](docs/HOST_CONTRACT.md).
 
 ## Build
 
@@ -90,6 +106,9 @@ CI is the supported reproducible build environment:
 
 # macOS 15 Apple Silicon, using the guest produced above
 ./scripts/build-darwin-arm64.sh /path/to/edgejs.wasm
+
+# macOS 15 Intel, building a pinned native x86_64 V8 host dependency
+./scripts/build-darwin-amd64.sh /path/to/edgejs.wasm
 
 # Windows Server 2025 x86-64, from PowerShell
 ./scripts/build-windows-amd64.ps1 -EdgeWasm C:\path\to\edgejs.wasm
@@ -121,3 +140,9 @@ read-only `/toolchain`, and writable `/tmp`.
 
 See [SECURITY.md](SECURITY.md) for the boundary and known limitations and
 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) for the executable release gates.
+
+GitHub Releases are public and are the only consumer distribution channel.
+Wurster-Lab must pin an exact tag, download the matching target asset and
+`SHA256SUMS` anonymously, verify the checksum, and only then stage/sign/package
+the binaries. This repository deliberately does not apply Apple Developer ID
+signing or notarization; that belongs to Wurster-Lab's final application build.

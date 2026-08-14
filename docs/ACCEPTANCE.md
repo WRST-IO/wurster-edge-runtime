@@ -1,9 +1,10 @@
 # Acceptance matrix
 
 The release job may publish only after the native verification suite passes on
-Linux amd64, macOS arm64, and Windows amd64. Linux repeats inside
-`unshare --net`; Windows repeats with outbound firewall rules for both bundled
-executables. The checks map to the Pigsty runtime requirements as follows.
+Linux amd64, macOS arm64, native macOS amd64, and Windows amd64. Linux repeats
+inside `unshare --net`; Windows repeats with outbound firewall rules for both
+bundled executables. The checks map to the Pigsty runtime requirements as
+follows.
 
 | Requirement | Executable gate |
 | --- | --- |
@@ -17,9 +18,12 @@ executables. The checks map to the Pigsty runtime requirements as follows.
 | local Wasmer override | all runtime calls set the exact bundle `WASMER_BIN` path |
 | no broken mounts | package manifest has no `[fs]`, `quickjs-wasm/etc`, or `quickjs-wasm/pnpm` |
 | matching N-API ABI | source fetch asserts both gitlinks equal `c5b66fb`; Wasmer feature markers and Edge WASM import validator must pass; safe mode uses a pinned platform-supported backend |
-| versioned and traceable | lock file, generated manifest, per-file hashes, deterministic tar/ZIP metadata, and archive checksum |
+| versioned and traceable | lock file, generated manifest, per-file hashes, deterministic tar/ZIP metadata, archive checksum, and guest SHA-256 |
 | path-only Wurster integration | acceptance commands set only binary/package paths and start from the projected workspace |
 
-The generated artifacts themselves are the evidence. The central release job
-cannot run until all three target jobs have uploaded their verified final
-archives. See [PLATFORMS.md](PLATFORMS.md).
+Every runtime suite is repeated against a fresh extraction of the final archive,
+not only its staging directory. The central release job also opens all five
+archives, verifies every manifest, compares every compatibility lock, and
+requires byte-identical guest contents. It cannot run until all four desktop
+jobs have uploaded their verified final archives and the core archive exists.
+See [PLATFORMS.md](PLATFORMS.md).

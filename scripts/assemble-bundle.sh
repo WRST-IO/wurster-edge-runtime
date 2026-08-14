@@ -19,13 +19,14 @@ source_date_epoch="$(lock_value "$lock" toolchain.source_date_epoch)"
 case "$target" in
   linux-amd64) require_linux_amd64 ;;
   darwin-arm64) require_darwin_arm64 ;;
+  darwin-amd64) require_darwin_amd64 ;;
   *) printf 'error: unsupported bundle target: %s\n' "$target" >&2; exit 1 ;;
 esac
 for command in find git gzip install python3; do
   require_command "$command"
 done
 
-if [[ "$target" == darwin-arm64 ]]; then
+if [[ "$target" == darwin-* ]]; then
   require_command gtar
   tar_command="gtar"
 else

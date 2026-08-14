@@ -8,8 +8,8 @@ is `v0.1.0-dev.2`.
 
 1. Change the compatibility lock, patches, or packaging as needed and increment
    all version fields together.
-2. Let the pull-request workflow pass Linux amd64, macOS arm64, and Windows
-   amd64.
+2. Let the pull-request workflow pass Linux amd64, macOS arm64, native macOS
+   amd64, and Windows amd64, including verification from final archives.
 3. Merge the reviewed commit to `main`.
 4. Create an annotated tag on that exact main commit and push it:
 
@@ -21,9 +21,17 @@ is `v0.1.0-dev.2`.
    git push origin "v$(<VERSION)"
    ```
 
-The tag workflow rebuilds and retests all three platforms. The `release` job
-checks the tag/version match and waits for all final archives. It then creates
-one GitHub Release with the three bundles and `SHA256SUMS`.
+The tag workflow rebuilds and retests all four desktop platforms. The `release`
+job checks the tag/version match and waits for all final archives. It then
+creates one public GitHub Release with the four standalone bundles, the portable
+core bundle, and `SHA256SUMS`. The release-set gate proves every desktop bundle
+contains the exact `wurster-edgejs.wasm` bytes published by the core archive.
+Assets are first uploaded to a draft; only the complete set is made public.
+The workflow then probes every public asset URL without credentials.
+
+Release assets are unsigned runtime inputs. Wurster-Lab verifies them first and
+is responsible for final Apple Developer ID signing and notarization after
+staging them into the Wurster application bundle.
 
 Workflow concurrency is keyed by PR number or commit SHA. A tag pushed for the
 new main commit supersedes a redundant branch build of the same SHA, while

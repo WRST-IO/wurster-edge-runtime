@@ -39,6 +39,13 @@ def main() -> None:
         if sha256(path) != entry["sha256"]:
             raise SystemExit(f"sha256 mismatch: {relative}")
 
+    guest = manifest.get("wasix_guest", {})
+    guest_path = guest.get("path")
+    if guest_path not in expected:
+        raise SystemExit("manifest WASIX guest is not in the file contract")
+    if guest.get("sha256") != expected[guest_path]["sha256"]:
+        raise SystemExit("manifest WASIX guest hash disagrees with file contract")
+
     print(f"manifest verified: {len(actual)} files")
 
 

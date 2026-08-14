@@ -48,7 +48,37 @@ def main() -> None:
             }
         )
 
-    executable_suffix = ".exe" if args.target == "windows-amd64" else ""
+    if args.target == "core":
+        guest_path = "wurster-edgejs.wasm"
+        runtime_contract = {
+            "host_kind": "portable-wasix-guest",
+            "guest": guest_path,
+            "filesystem_default": "explicit-mounts-only",
+            "network_default": "disabled",
+            "network_policy_owner": "wurster",
+            "guest_home": "/tmp",
+            "host_node_fallback": False,
+        }
+    else:
+        executable_suffix = ".exe" if args.target == "windows-amd64" else ""
+        guest_path = "share/edge-wasix/edgejs.wasm"
+        runtime_contract = {
+            "host_kind": "native-process",
+            "edge": f"bin/edge{executable_suffix}",
+            "wasmer": f"bin/wasmer{executable_suffix}",
+            "guest": guest_path,
+            "edge_wasmer_package": "share/edge-wasix",
+            "filesystem_default": "cwd-only",
+            "network_default": "disabled",
+            "network_policy_owner": "wurster",
+            "guest_home": "/tmp",
+            "host_node_fallback": False,
+        }
+
+    guest = bundle / guest_path
+    if not guest.is_file():
+        raise SystemExit(f"WASIX guest missing from bundle: {guest_path}")
+
     manifest = {
         "schema": 1,
         "name": lock["bundle"]["name"],
@@ -57,14 +87,11 @@ def main() -> None:
         "sources": lock["sources"],
         "toolchain": lock["toolchain"],
         "patches": patches,
-        "runtime_contract": {
-            "edge": f"bin/edge{executable_suffix}",
-            "wasmer": f"bin/wasmer{executable_suffix}",
-            "edge_wasmer_package": "share/edge-wasix",
-            "network_default": "disabled",
-            "guest_home": "/tmp",
-            "host_node_fallback": False,
+        "wasix_guest": {
+            "path": guest_path,
+            "sha256": sha256(guest),
         },
+        "runtime_contract": runtime_contract,
         "files": files,
     }
     output = bundle / "manifest.json"
