@@ -43,6 +43,11 @@ export PATH="$PATH:$depot_root"
 export DEPOT_TOOLS_UPDATE=0
 export DEPOT_TOOLS_METRICS=0
 
+# Auto-update is disabled to preserve the pinned depot_tools commit. Initialize
+# only that checkout's manifest-locked Python/CIPD tools before invoking fetch
+# or gclient; this does not update the repository itself.
+"$depot_root/ensure_bootstrap"
+
 sync_complete=0
 for attempt in 1 2 3; do
   rm -rf -- "$checkout_root"

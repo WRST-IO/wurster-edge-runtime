@@ -139,8 +139,11 @@ if ((& git -C $V8Root rev-parse HEAD) -ne $ExpectedCommit) {
     -o (Join-Path $V8Root "build/util/LASTCHANGE")
 
 Get-ChildItem (Join-Path $BuilderRoot "patches") -Filter "*.patch" | Sort-Object Name | ForEach-Object {
-    & git -C $V8Root apply --check $_.FullName
-    & git -C $V8Root apply $_.FullName
+    # Match the pinned upstream Windows builder: Git for Windows may expose
+    # CRLF in this checkout even with autocrlf disabled, so ignore whitespace
+    # differences while retaining the exact patch content and target lines.
+    & git -C $V8Root apply --ignore-whitespace --check $_.FullName
+    & git -C $V8Root apply --ignore-whitespace $_.FullName
 }
 
 $BuildRoot = Join-Path $V8Root "out/wurster-release"
