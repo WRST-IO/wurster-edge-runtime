@@ -50,6 +50,7 @@
     },
     "rust": "1.95",
     "xcode": "16.2 (16C5032a)",
+    "windows_source_charset": "UTF-8 (/utf-8)",
     "source_date_epoch": 1786578280,
     "llvm": {
       "version": "22.1.8",
