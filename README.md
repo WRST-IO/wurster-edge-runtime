@@ -58,6 +58,9 @@ release job downloads the already-tested archives, recomputes one authoritative
 checksum file, verifies it, and publishes all assets together. A partial
 platform release cannot be created by the workflow.
 
+Maintainer steps, version invariants, and recovery behavior are documented in
+[docs/RELEASING.md](docs/RELEASING.md).
+
 ## Bundle layout
 
 ```text
