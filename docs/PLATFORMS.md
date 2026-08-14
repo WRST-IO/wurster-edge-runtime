@@ -18,10 +18,10 @@ Linux-only `strace` and network-namespace gates are not claimed on Darwin.
 
 Built natively on GitHub's `macos-15-intel` x86_64 runner. This is a real Intel
 build: both binaries must be Mach-O x86_64. It uses the same guest as every
-other host. Because upstream V8 11.9.7 does not publish a Darwin x86_64 asset,
-CI builds its pinned V8 commit with the pinned `v8-custom-builds` patchset and
-pinned depot_tools revision; no ARM bundle or Rosetta compatibility substitution
-is accepted.
+other host. Because the upstream custom-build release does not publish a Darwin
+x86_64 asset, CI builds its pinned V8 commit with the pinned `v8-custom-builds`
+patchset and pinned depot_tools revision; no ARM bundle or Rosetta compatibility
+substitution is accepted.
 
 ## Windows amd64
 
@@ -32,9 +32,12 @@ of the necessary pieces but do not connect them into a working safe runtime:
   safe-mode capture and passthrough functions still use POSIX-only
   `pipe/fork/execvp/waitpid`;
 - Wasmer's Makefile explicitly removes `napi-v8` on Windows;
-- the shared NAPI resolver recognizes `windows-amd64` and V8 11.9.7 publishes
-  `v8-windows-amd64.tar.xz`, but its linker setup still requests Unix system
-  libraries and its CMake resolver has no Windows mapping.
+- the shared NAPI resolver recognizes `windows-amd64`, but the archive published
+  under the upstream release label `11.9.7` is incomplete on Windows. Its
+  internal version is V8 `13.6.233.17`, and it omits required public cppgc
+  headers. WRST.IO therefore builds the Windows library and complete header
+  tree from the matching pinned V8 source commit instead of consuming that
+  archive.
 
 The WRST.IO patches complete these paths. Windows uses Wasmer's supported V8
 WASM backend (`--v8`) instead of unavailable LLVM, while retaining the same
@@ -45,7 +48,8 @@ Relevant upstream evidence:
 
 - [Wasmer pinned Makefile](https://github.com/wasmerio/wasmer/blob/9b8fdf1720d6671a3de76aa8727f84536979104f/Makefile)
 - [shared NAPI Windows target matcher](https://github.com/wasmerio/napi/blob/c5b66fb9f5b1b997d5bdd463dc1a80bb174d4730/build.rs)
-- [V8 custom builds 11.9.7](https://github.com/wasmerio/v8-custom-builds/releases/tag/11.9.7)
+- [V8 custom-build asset release 11.9.7](https://github.com/wasmerio/v8-custom-builds/releases/tag/11.9.7),
+  whose verified internal engine version is `13.6.233.17`
 
 A Windows asset is released only when all of the following are true:
 

@@ -49,13 +49,18 @@ assert lock["bundle"]["targets"] == [
     "windows-amd64",
 ]
 assert lock["bundle"]["reserved_targets"] == ["web", "ios-arm64", "android-arm64"]
-assert lock["toolchain"]["v8"]["version"] == "11.9.7"
+assert lock["toolchain"]["v8"]["version"] == "13.6.233.17"
+assert lock["toolchain"]["v8"]["upstream_asset_release"] == "11.9.7"
 assert set(lock["toolchain"]["v8"]["targets"]) == set(lock["bundle"]["targets"])
 assert set(lock["toolchain"]["wasmer_features"]) == set(lock["bundle"]["targets"])
 assert lock["toolchain"]["v8"]["targets"]["darwin-amd64"]["build"] == "source"
 assert lock["toolchain"]["v8"]["targets"]["darwin-amd64"]["v8_commit"] == lock["sources"]["v8"]["commit"]
 assert lock["toolchain"]["v8"]["targets"]["darwin-amd64"]["builder_commit"] == lock["sources"]["v8_custom_builds"]["commit"]
 assert lock["toolchain"]["v8"]["targets"]["darwin-amd64"]["depot_tools_commit"] == lock["sources"]["depot_tools"]["commit"]
+assert lock["toolchain"]["v8"]["targets"]["windows-amd64"]["build"] == "source"
+assert lock["toolchain"]["v8"]["targets"]["windows-amd64"]["v8_commit"] == lock["sources"]["v8"]["commit"]
+assert lock["toolchain"]["v8"]["targets"]["windows-amd64"]["builder_commit"] == lock["sources"]["v8_custom_builds"]["commit"]
+assert lock["toolchain"]["v8"]["targets"]["windows-amd64"]["depot_tools_commit"] == lock["sources"]["depot_tools"]["commit"]
 assert "llvm" not in lock["toolchain"]["wasmer_features"]["windows-amd64"]
 assert "v8" in lock["toolchain"]["wasmer_features"]["windows-amd64"]
 PY

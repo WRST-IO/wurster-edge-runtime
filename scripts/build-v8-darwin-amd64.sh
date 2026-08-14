@@ -21,6 +21,7 @@ for command in git install ninja python3; do
 done
 
 if [[ -f "$output/include/v8.h" && -f "$output/lib/libv8.a" ]]; then
+  verify_v8_version "$output/include" "$(lock_value "$lock" toolchain.v8.version)"
   exit 0
 fi
 if [[ -e "$output" ]]; then
@@ -42,19 +43,28 @@ export PATH="$PATH:$depot_root"
 export DEPOT_TOOLS_UPDATE=0
 export DEPOT_TOOLS_METRICS=0
 
-if [[ ! -d "$v8_root/.git" ]]; then
-  (
+sync_complete=0
+for attempt in 1 2 3; do
+  rm -rf -- "$checkout_root"
+  install -d "$checkout_root"
+  if (
     cd "$checkout_root"
-    fetch v8
-  )
+    fetch v8 &&
+      git -C "$v8_root" fetch --depth 1 origin "$v8_commit" &&
+      git -C "$v8_root" checkout --detach "$v8_commit" &&
+      gclient sync --with_branch_heads --with_tags --nohooks \
+        --revision "v8@$v8_commit"
+  ); then
+    sync_complete=1
+    break
+  fi
+  printf 'warning: V8 dependency sync attempt %s failed; retrying from a clean checkout\n' \
+    "$attempt" >&2
+done
+if [[ "$sync_complete" != 1 ]]; then
+  printf 'error: failed to sync the pinned V8 dependency graph after 3 attempts\n' >&2
+  exit 1
 fi
-
-git -C "$v8_root" fetch origin "$v8_commit"
-git -C "$v8_root" checkout --detach "$v8_commit"
-(
-  cd "$checkout_root"
-  gclient sync --with_branch_heads --with_tags --nohooks --revision "v8@$v8_commit"
-)
 test "$(git -C "$v8_root" rev-parse HEAD)" = "$v8_commit"
 python3 "$v8_root/build/util/lastchange.py" -o "$v8_root/build/util/LASTCHANGE"
 
@@ -110,3 +120,4 @@ mv "$stage" "$output"
 
 test -f "$output/include/v8.h"
 test -f "$output/lib/libv8.a"
+verify_v8_version "$output/include" "$(lock_value "$lock" toolchain.v8.version)"

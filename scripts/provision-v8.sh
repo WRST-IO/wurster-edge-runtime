@@ -12,6 +12,7 @@ version="$(lock_value "$lock" toolchain.v8.version)"
 download_root="${WURSTER_BUILD_DOWNLOAD_ROOT:-$root/build/downloads}"
 v8_root="${WURSTER_V8_ROOT:-$root/build/v8-$version-$target}"
 if [[ -f "$v8_root/include/v8.h" && -f "$v8_root/lib/libv8.a" ]]; then
+  verify_v8_version "$v8_root/include" "$version"
   printf '%s\n' "$v8_root"
   exit 0
 fi
@@ -56,6 +57,7 @@ if [[ ! -f "$extract_root/include/v8.h" || ! -f "$extract_root/lib/libv8.a" ]]; 
   printf 'error: pinned V8 archive has no expected headers/static library\n' >&2
   exit 1
 fi
+verify_v8_version "$extract_root/include" "$version"
 mv "$extract_root" "$v8_root"
 trap - EXIT
 printf '%s\n' "$v8_root"

@@ -37,7 +37,7 @@ selection, and the shared NAPI V8 resolver. Details are in
 | N-API | `c5b66fb9f5b1b997d5bdd463dc1a80bb174d4730` | Identical ABI implementation in Edge and Wasmer |
 | wasixcc | `v0.4.3`, sysroot `v2026-07-30.1` | WASIX guest compiler |
 | LLVM | `22.1.8`, per-target checksums | Safe-mode execution backend |
-| V8 host build | `11.9.7`, pinned binary hashes or pinned source build | Edge and Wasmer NAPI-V8 bridge |
+| V8 host build | `13.6.233.17`, pinned binary hashes or pinned source build | Edge and Wasmer NAPI-V8 bridge |
 
 `runtime.lock.json` is authoritative. Bundle versions are independent of Edge
 and Wasmer versions and select one complete compatibility lock.

@@ -30,7 +30,7 @@
     },
     "v8": {
       "repository": "https://github.com/v8/v8.git",
-      "commit": "0cf4a79627155f98056844f7cc960481ab056f21"
+      "commit": "b0a55a7dad7f536cce1f9aaddba89894c8533946"
     },
     "v8_custom_builds": {
       "repository": "https://github.com/wasmerio/v8-custom-builds.git",
@@ -71,7 +71,8 @@
       }
     },
     "v8": {
-      "version": "11.9.7",
+      "version": "13.6.233.17",
+      "upstream_asset_release": "11.9.7",
       "targets": {
         "linux-amd64": {
           "url": "https://github.com/wasmerio/v8-custom-builds/releases/download/11.9.7/v8-linux-amd64.tar.xz",
@@ -83,13 +84,15 @@
         },
         "darwin-amd64": {
           "build": "source",
-          "v8_commit": "0cf4a79627155f98056844f7cc960481ab056f21",
+          "v8_commit": "b0a55a7dad7f536cce1f9aaddba89894c8533946",
           "builder_commit": "844d01dc10edaa0461715f484e06b004f1fd023e",
           "depot_tools_commit": "8906f98462ad0a0d8250236059e23fe6d27c7318"
         },
         "windows-amd64": {
-          "url": "https://github.com/wasmerio/v8-custom-builds/releases/download/11.9.7/v8-windows-amd64.tar.xz",
-          "sha256": "2aee8b6c3e8cecae2ce0325ac01b9bcaea4bef49e8f2aac599e1729d60c17285"
+          "build": "source",
+          "v8_commit": "b0a55a7dad7f536cce1f9aaddba89894c8533946",
+          "builder_commit": "844d01dc10edaa0461715f484e06b004f1fd023e",
+          "depot_tools_commit": "8906f98462ad0a0d8250236059e23fe6d27c7318"
         }
       }
     },

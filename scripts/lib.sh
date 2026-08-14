@@ -80,6 +80,23 @@ sha256_file() {
   fi
 }
 
+verify_v8_version() {
+  local include_root="$1"
+  local expected="$2"
+  python3 - "$include_root/v8-version.h" "$expected" <<'PY'
+import pathlib
+import re
+import sys
+
+header = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+expected = tuple(int(part) for part in sys.argv[2].split("."))
+names = ("V8_MAJOR_VERSION", "V8_MINOR_VERSION", "V8_BUILD_NUMBER", "V8_PATCH_LEVEL")
+actual = tuple(int(re.search(rf"^#define {name} (\d+)$", header, re.MULTILINE).group(1)) for name in names)
+if actual != expected:
+    raise SystemExit(f"V8 header version mismatch: expected {expected}, found {actual}")
+PY
+}
+
 checkout_pinned_repo() {
   local repository="$1"
   local commit="$2"
