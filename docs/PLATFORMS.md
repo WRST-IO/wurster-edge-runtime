@@ -18,19 +18,29 @@ macOS Intel is intentionally outside the Wurster release matrix.
 
 ## Windows amd64
 
-Windows is a required future Wurster platform, but it is not releasable with the
-current pinned upstream pair. Wasmer's pinned Makefile adds `napi-v8` only when
-`IS_WINDOWS` is not set, and the matching `wasmer-v8` custom-build release has
-Linux and Darwin archives but no Windows archive. A normal Wasmer executable is
-therefore insufficient: Edge safe mode needs the matching NAPI extension host
-imports.
+Windows is a mandatory release target. The pinned upstream sources contain most
+of the necessary pieces but do not connect them into a working safe runtime:
+
+- Edge has Windows process spawning for compatibility commands, while its
+  safe-mode capture and passthrough functions still use POSIX-only
+  `pipe/fork/execvp/waitpid`;
+- Wasmer's Makefile explicitly removes `napi-v8` on Windows;
+- the shared NAPI resolver recognizes `windows-amd64` and V8 11.9.7 publishes
+  `v8-windows-amd64.tar.xz`, but its linker setup still requests Unix system
+  libraries and its CMake resolver has no Windows mapping.
+
+The WRST.IO patches complete these paths. Windows uses Wasmer's supported V8
+WASM backend (`--v8`) instead of unavailable LLVM, while retaining the same
+NAPI import ABI and the byte-identical Edge WASIX guest used on Linux and macOS.
+The bundle is built natively on GitHub's Windows Server 2025 amd64 runner.
 
 Relevant upstream evidence:
 
 - [Wasmer pinned Makefile](https://github.com/wasmerio/wasmer/blob/9b8fdf1720d6671a3de76aa8727f84536979104f/Makefile)
-- [Wasmer V8 custom builds 11.9.2](https://github.com/wasmerio/wasmer-v8-custom-builds/releases/tag/11.9.2)
+- [shared NAPI Windows target matcher](https://github.com/wasmerio/napi/blob/c5b66fb9f5b1b997d5bdd463dc1a80bb174d4730/build.rs)
+- [V8 custom builds 11.9.7](https://github.com/wasmerio/v8-custom-builds/releases/tag/11.9.7)
 
-A Windows asset may be added only when all of the following are true:
+A Windows asset is released only when all of the following are true:
 
 1. a Windows NAPI-V8 Wasmer host can be built from pinned sources;
 2. Edge and Wasmer use the identical pinned N-API revision;
@@ -40,5 +50,8 @@ A Windows asset may be added only when all of the following are true:
 5. the final Windows bundle is produced and published by the same tag-gated
    release job.
 
-Until then, the workflow deliberately publishes no Windows `.exe` or archive.
-This is a compatibility boundary, not an Actions-runner limitation.
+The CI gate verifies PE32+ amd64 binaries, blocks outbound traffic for both
+executables with Windows Firewall, poisons `PATH` with Node/cmd/PowerShell
+probes, and exercises parent plus directory-junction escape attempts. A failed
+Windows job prevents the entire tagged release; Linux/macOS-only output is not
+considered a final Wurster Edge Runtime release.

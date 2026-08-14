@@ -16,7 +16,7 @@ for command in bash cmake git make python3 cargo rustc wasixcc wasm-opt; do
 done
 
 "$script_dir/fetch-sources.sh" "$source_root"
-"$script_dir/apply-patches.sh" "$source_root/edgejs"
+"$script_dir/apply-patches.sh" "$source_root"
 
 edge_commit="$(lock_value "$lock" sources.edgejs.commit)"
 wasmer_commit="$(lock_value "$lock" sources.wasmer.commit)"
@@ -32,6 +32,9 @@ test "$(git -C "$source_root/wasmer" rev-parse HEAD)" = "$wasmer_commit"
 test "$(git -C "$source_root/edgejs" rev-parse HEAD:napi)" = "$napi_commit"
 test "$(git -C "$source_root/wasmer" rev-parse HEAD:lib/napi)" = "$napi_commit"
 
+v8_root="$("$script_dir/provision-v8.sh")"
+export NAPI_V8_INCLUDE_DIR="$v8_root/include"
+export NAPI_V8_LIBRARY="$v8_root/lib/libv8.a"
 make -C "$source_root/edgejs" build CMAKE_BUILD_TYPE=Release JOBS="$jobs"
 make -C "$source_root/edgejs" build-wasix CMAKE_BUILD_TYPE=Release JOBS="$jobs"
 make -C "$source_root/edgejs" validate-wasix-imports

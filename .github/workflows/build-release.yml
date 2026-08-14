@@ -135,9 +135,89 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+  windows-amd64:
+    needs: linux-amd64
+    runs-on: windows-2025
+    timeout-minutes: 240
+    env:
+      JOBS: '4'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - name: Check out runtime repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Configure MSVC amd64 build environment
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+
+      - name: Require Windows amd64 runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not [Environment]::Is64BitOperatingSystem -or
+              $env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
+            throw "Expected Windows amd64 runner"
+          }
+          git config --global core.longpaths true
+          rustup toolchain install 1.95 --profile minimal
+          cmake --version
+          ninja --version
+
+      - name: Check repository contracts
+        shell: bash
+        run: ./scripts/check.sh
+
+      - name: Download the tested platform-neutral WASIX guest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: edge-wasix-guest
+          path: build/guest
+
+      - name: Build and verify Windows amd64 bundle
+        shell: pwsh
+        run: ./scripts/build-windows-amd64.ps1 -EdgeWasm build/guest/edgejs.wasm
+
+      - name: Repeat Windows verification with outbound traffic blocked
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bundle = (Resolve-Path out/wurster-edge-runtime-windows-amd64).Path
+          $edgeRule = "WursterEdge-$([Guid]::NewGuid())"
+          $wasmerRule = "WursterWasmer-$([Guid]::NewGuid())"
+          New-NetFirewallRule -DisplayName $edgeRule -Direction Outbound -Action Block `
+            -Program (Join-Path $bundle "bin/edge.exe") -Profile Any | Out-Null
+          New-NetFirewallRule -DisplayName $wasmerRule -Direction Outbound -Action Block `
+            -Program (Join-Path $bundle "bin/wasmer.exe") -Profile Any | Out-Null
+          try {
+            ./scripts/verify-bundle-windows.ps1 -Bundle $bundle
+          } finally {
+            Remove-NetFirewallRule -DisplayName $edgeRule -ErrorAction SilentlyContinue
+            Remove-NetFirewallRule -DisplayName $wasmerRule -ErrorAction SilentlyContinue
+          }
+
+      - name: Verify Windows archive checksum
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archive = "out/wurster-edge-runtime-windows-amd64.zip"
+          $expected = (Get-Content "$archive.sha256").Split()[0]
+          $actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Windows archive checksum mismatch" }
+
+      - name: Upload complete Windows amd64 bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wurster-edge-runtime-windows-amd64
+          path: |
+            out/wurster-edge-runtime-windows-amd64.zip
+            out/wurster-edge-runtime-windows-amd64.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux-amd64, darwin-arm64]
+    needs: [linux-amd64, darwin-arm64, windows-amd64]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -163,12 +243,19 @@ jobs:
           name: wurster-edge-runtime-darwin-arm64
           path: release-assets
 
+      - name: Download Windows amd64 release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: wurster-edge-runtime-windows-amd64
+          path: release-assets
+
       - name: Build one authoritative checksum file
         shell: bash
         run: |
           set -euo pipefail
           cd release-assets
-          sha256sum wurster-edge-runtime-*.tar.gz > SHA256SUMS
+          sha256sum wurster-edge-runtime-*.tar.gz \
+            wurster-edge-runtime-windows-amd64.zip > SHA256SUMS
           sha256sum --check SHA256SUMS
 
       - name: Publish final platform bundles to GitHub Releases
@@ -180,6 +267,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             release-assets/wurster-edge-runtime-linux-amd64.tar.gz \
             release-assets/wurster-edge-runtime-darwin-arm64.tar.gz \
+            release-assets/wurster-edge-runtime-windows-amd64.zip \
             release-assets/SHA256SUMS \
             --verify-tag \
             --title "Wurster Edge Runtime $GITHUB_REF_NAME" \

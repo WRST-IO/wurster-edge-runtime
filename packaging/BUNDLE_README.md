@@ -14,6 +14,10 @@ export EDGE_WASMER_PACKAGE=/absolute/path/to/share/edge-wasix
 exec "$WURSTER_EDGE_BIN" --safe app.js
 ```
 
+On Windows, set the corresponding `bin\edge.exe`, `bin\wasmer.exe`, and
+`share\edge-wasix` absolute paths in the child process environment and start
+`edge.exe --safe app.js` from the projected Wurst workspace.
+
 Safe mode mounts only the current directory, supplies guest `HOME=/tmp`, and
 does not grant networking. It neither calls a host Node binary nor falls back
 to a host shell. The package manifest contains no registry dependency and no

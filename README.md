@@ -17,15 +17,14 @@ delta, and the update policy.
 | --- | --- | --- |
 | `wurster-edge-runtime-linux-amd64.tar.gz` | release-gated | Linux x86-64 |
 | `wurster-edge-runtime-darwin-arm64.tar.gz` | release-gated | macOS Apple Silicon |
-| Windows amd64 | blocked upstream | not published |
+| `wurster-edge-runtime-windows-amd64.zip` | release-gated | Windows x86-64 |
 | macOS Intel | out of scope | not published |
 
 “Release-gated” means the archive is published only if that exact bundle passes
-the Pigsty safe-mode acceptance suite. Windows is not being labelled as
-supported prematurely: the pinned Wasmer build explicitly disables the
-required NAPI-V8 host feature on Windows and its matching V8 distribution has
-no Windows artifact. Details and the unblock criteria are in
-[docs/PLATFORMS.md](docs/PLATFORMS.md).
+the native Pigsty safe-mode acceptance suite. Windows is a mandatory target,
+not an optional follow-up. The WRST.IO patch set completes the unfinished
+Windows paths in Edge's safe launcher, Wasmer's NAPI feature selection, and the
+shared NAPI V8 resolver. Details are in [docs/PLATFORMS.md](docs/PLATFORMS.md).
 
 ## Compatibility lock
 
@@ -36,7 +35,7 @@ no Windows artifact. Details and the unblock criteria are in
 | N-API | `c5b66fb9f5b1b997d5bdd463dc1a80bb174d4730` | Identical ABI implementation in Edge and Wasmer |
 | wasixcc | `v0.4.3`, sysroot `v2026-07-30.1` | WASIX guest compiler |
 | LLVM | `22.1.8`, per-target checksums | Safe-mode execution backend |
-| V8 host build | `11.9.2`, per-target checksums | Wasmer NAPI-V8 bridge |
+| V8 host build | `11.9.7`, per-target checksums | Edge and Wasmer NAPI-V8 bridge |
 
 `runtime.lock.json` is authoritative. Bundle versions are independent of Edge
 and Wasmer versions and select one complete compatibility lock.
@@ -50,6 +49,7 @@ only after all pass, creates a GitHub Release containing:
 ```text
 wurster-edge-runtime-linux-amd64.tar.gz
 wurster-edge-runtime-darwin-arm64.tar.gz
+wurster-edge-runtime-windows-amd64.zip
 SHA256SUMS
 ```
 
@@ -77,8 +77,8 @@ wurster-edge-runtime-<target>/
 ```
 
 The WASIX guest is built once in the Linux job and reused byte-for-byte by the
-macOS host build. Native `edge` and `wasmer` binaries are built and tested on
-their target operating system.
+macOS and Windows host builds. Native `edge` and `wasmer` binaries are built and
+tested on their target operating system.
 
 ## Build
 
@@ -90,6 +90,9 @@ CI is the supported reproducible build environment:
 
 # macOS 15 Apple Silicon, using the guest produced above
 ./scripts/build-darwin-arm64.sh /path/to/edgejs.wasm
+
+# Windows Server 2025 x86-64, from PowerShell
+./scripts/build-windows-amd64.ps1 -EdgeWasm C:\path\to\edgejs.wasm
 ```
 
 `make build` selects the supported target for the current host. Source

@@ -25,6 +25,11 @@ The Wurster patch currently changes the Edge safe-mode launcher contract to:
 - omit the upstream unconditional `--net` capability;
 - expose guest `HOME=/tmp` rather than inheriting host `HOME`.
 
+The Windows downstream delta additionally supplies native safe-mode process
+spawning, enables Wasmer's NAPI-V8 host on Windows, adds the published Windows
+V8 library layout to both NAPI resolvers, and selects Wasmer's Windows V8 WASM
+backend rather than LLVM.
+
 The local WASIX package manifest removes upstream references to absent
 `quickjs-wasm/etc` and `quickjs-wasm/pnpm` paths and contains no registry or CDN
 dependency. WurstFS projection is deliberately not implemented in this fork.

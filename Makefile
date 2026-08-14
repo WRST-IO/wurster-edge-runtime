@@ -1,4 +1,4 @@
-.PHONY: check fetch build build-linux-amd64 build-darwin-arm64 verify
+.PHONY: check fetch build build-linux-amd64 build-darwin-arm64 build-windows-amd64 verify
 
 check:
 	./scripts/check.sh
@@ -18,6 +18,9 @@ build-linux-amd64:
 
 build-darwin-arm64:
 	./scripts/build-darwin-arm64.sh
+
+build-windows-amd64:
+	pwsh -File ./scripts/build-windows-amd64.ps1
 
 verify:
 	./scripts/verify-bundle.sh

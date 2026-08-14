@@ -5,7 +5,8 @@
     "version": "0.1.0-dev.2",
     "targets": [
       "linux-amd64",
-      "darwin-arm64"
+      "darwin-arm64",
+      "windows-amd64"
     ]
   },
   "sources": {
@@ -25,7 +26,8 @@
   "toolchain": {
     "build_hosts": {
       "linux-amd64": "ubuntu-24.04-amd64",
-      "darwin-arm64": "macos-15-arm64"
+      "darwin-arm64": "macos-15-arm64",
+      "windows-amd64": "windows-2025-amd64"
     },
     "rust": "1.95",
     "source_date_epoch": 1786578280,
@@ -43,32 +45,46 @@
       }
     },
     "v8": {
-      "version": "11.9.2",
+      "version": "11.9.7",
       "targets": {
         "linux-amd64": {
-          "url": "https://github.com/wasmerio/wasmer-v8-custom-builds/releases/download/11.9.2/v8-linux-amd64.tar.xz",
-          "sha256": "9d30957412adc9531bee513e0dbe110ec4a12a42db1bfd2bf7cd1e8ddf8402fa"
+          "url": "https://github.com/wasmerio/v8-custom-builds/releases/download/11.9.7/v8-linux-amd64.tar.xz",
+          "sha256": "54e19938a034ee77888b10cf27704b19e317dfbfe8f68d7a5f8ad8968fe731ba"
         },
         "darwin-arm64": {
-          "url": "https://github.com/wasmerio/wasmer-v8-custom-builds/releases/download/11.9.2/v8-darwin-arm64.tar.xz",
-          "sha256": "c401b53dc006c3c6b403d93c77bf3fc214d45e7a9d7d1641cfccab83ffa2cf43"
+          "url": "https://github.com/wasmerio/v8-custom-builds/releases/download/11.9.7/v8-darwin-aarch64.tar.xz",
+          "sha256": "564d32b3a3231d26bc1a377b5cdd098f8832c4e454d323fb84499893510d7aae"
+        },
+        "windows-amd64": {
+          "url": "https://github.com/wasmerio/v8-custom-builds/releases/download/11.9.7/v8-windows-amd64.tar.xz",
+          "sha256": "2aee8b6c3e8cecae2ce0325ac01b9bcaea4bef49e8f2aac599e1729d60c17285"
         }
       }
     },
     "wasixcc_action_commit": "8a505d4605b15fd466a3881d286582b23e4ffecb",
     "wasixcc_version": "v0.4.3",
     "wasixcc_sysroot": "v2026-07-30.1",
-    "wasmer_features": [
-      "cranelift",
-      "llvm",
-      "singlepass",
-      "wasm-c-api",
-      "napi-v8",
-      "wasmer-artifact-create",
-      "static-artifact-create",
-      "wasmer-artifact-load",
-      "static-artifact-load"
-    ]
+    "wasmer_features": {
+      "linux-amd64": [
+        "cranelift",
+        "llvm",
+        "singlepass",
+        "wasm-c-api",
+        "napi-v8"
+      ],
+      "darwin-arm64": [
+        "cranelift",
+        "llvm",
+        "singlepass",
+        "wasm-c-api",
+        "napi-v8"
+      ],
+      "windows-amd64": [
+        "v8",
+        "wasm-c-api",
+        "napi-v8"
+      ]
+    }
   },
   "upstream_evidence": {
     "edge_ci_run": "https://github.com/wasmerio/edgejs/actions/runs/31651995923",

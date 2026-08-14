@@ -48,6 +48,7 @@ def main() -> None:
             }
         )
 
+    executable_suffix = ".exe" if args.target == "windows-amd64" else ""
     manifest = {
         "schema": 1,
         "name": lock["bundle"]["name"],
@@ -57,8 +58,8 @@ def main() -> None:
         "toolchain": lock["toolchain"],
         "patches": patches,
         "runtime_contract": {
-            "edge": "bin/edge",
-            "wasmer": "bin/wasmer",
+            "edge": f"bin/edge{executable_suffix}",
+            "wasmer": f"bin/wasmer{executable_suffix}",
             "edge_wasmer_package": "share/edge-wasix",
             "network_default": "disabled",
             "guest_home": "/tmp",
