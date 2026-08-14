@@ -20,6 +20,7 @@ def main() -> None:
     parser.add_argument("--bundle", required=True, type=Path)
     parser.add_argument("--lock", required=True, type=Path)
     parser.add_argument("--patch-root", required=True, type=Path)
+    parser.add_argument("--target", required=True)
     args = parser.parse_args()
 
     bundle = args.bundle.resolve()
@@ -51,7 +52,7 @@ def main() -> None:
         "schema": 1,
         "name": lock["bundle"]["name"],
         "version": lock["bundle"]["version"],
-        "target": lock["bundle"]["target"],
+        "target": args.target,
         "sources": lock["sources"],
         "toolchain": lock["toolchain"],
         "patches": patches,

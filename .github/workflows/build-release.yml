@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   linux-amd64:
@@ -42,22 +42,30 @@ jobs:
       - name: Check repository contracts
         run: ./scripts/check.sh
 
-      - name: Build and verify bundle
+      - name: Build and verify Linux amd64 bundle
         run: ./scripts/build-linux-amd64.sh
 
-      - name: Repeat verification without a network namespace
+      - name: Repeat Linux verification without a network namespace
         shell: bash
         run: |
           set -euo pipefail
           sudo --preserve-env=PATH unshare --net -- \
             ./scripts/verify-bundle.sh out/wurster-edge-runtime-linux-amd64
 
-      - name: Verify published archive checksum
+      - name: Verify Linux archive checksum
         shell: bash
         run: |
           set -euo pipefail
           cd out
-          sha256sum --check SHA256SUMS
+          sha256sum --check wurster-edge-runtime-linux-amd64.tar.gz.sha256
+
+      - name: Upload platform-neutral WASIX guest for host builds
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: edge-wasix-guest
+          path: build/src/edgejs/build-wasix/edgejs.wasm
+          if-no-files-found: error
+          compression-level: 0
 
       - name: Upload complete Linux amd64 bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -65,19 +73,110 @@ jobs:
           name: wurster-edge-runtime-linux-amd64
           path: |
             out/wurster-edge-runtime-linux-amd64.tar.gz
-            out/SHA256SUMS
+            out/wurster-edge-runtime-linux-amd64.tar.gz.sha256
           if-no-files-found: error
           compression-level: 0
 
-      - name: Publish tagged GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+  darwin-arm64:
+    needs: linux-amd64
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      JOBS: '4'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - name: Check out runtime repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Require Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install automake binaryen cmake gnu-tar ninja pkg-config protobuf shellcheck xz zstd
+          rustup toolchain install 1.95 --profile minimal
+
+      - name: Check repository contracts
+        run: ./scripts/check.sh
+
+      - name: Download the tested platform-neutral WASIX guest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: edge-wasix-guest
+          path: build/guest
+
+      - name: Build and verify macOS Apple Silicon bundle
+        run: ./scripts/build-darwin-arm64.sh build/guest/edgejs.wasm
+
+      - name: Verify macOS archive checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd out
+          shasum -a 256 -c wurster-edge-runtime-darwin-arm64.tar.gz.sha256
+
+      - name: Upload complete macOS Apple Silicon bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wurster-edge-runtime-darwin-arm64
+          path: |
+            out/wurster-edge-runtime-darwin-arm64.tar.gz
+            out/wurster-edge-runtime-darwin-arm64.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-amd64, darwin-arm64]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out runtime repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Require tag to match the bundle version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "v$(<VERSION)"
+
+      - name: Download Linux amd64 release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: wurster-edge-runtime-linux-amd64
+          path: release-assets
+
+      - name: Download macOS Apple Silicon release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: wurster-edge-runtime-darwin-arm64
+          path: release-assets
+
+      - name: Build one authoritative checksum file
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum wurster-edge-runtime-*.tar.gz > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Publish final platform bundles to GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "${GITHUB_REF_NAME}" \
-            out/wurster-edge-runtime-linux-amd64.tar.gz \
-            out/SHA256SUMS \
+          gh release create "$GITHUB_REF_NAME" \
+            release-assets/wurster-edge-runtime-linux-amd64.tar.gz \
+            release-assets/wurster-edge-runtime-darwin-arm64.tar.gz \
+            release-assets/SHA256SUMS \
             --verify-tag \
+            --title "Wurster Edge Runtime $GITHUB_REF_NAME" \
             --generate-notes

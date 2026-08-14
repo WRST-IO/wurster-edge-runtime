@@ -8,13 +8,13 @@ source "$script_dir/lib.sh"
 root="$(repo_root)"
 lock="$root/runtime.lock.json"
 download_root="${WURSTER_BUILD_DOWNLOAD_ROOT:-$root/build/downloads}"
-llvm_root="${WURSTER_LLVM_ROOT:-$root/build/llvm-22}"
-archive="$download_root/llvm-linux-amd64.tar.xz"
-expected_sha256="$(lock_value "$lock" toolchain.llvm.sha256)"
-url="$(lock_value "$lock" toolchain.llvm.url)"
+target="$(host_target)"
+llvm_root="${WURSTER_LLVM_ROOT:-$root/build/llvm-22-$target}"
+archive="$download_root/llvm-$target.tar.xz"
+expected_sha256="$(lock_value "$lock" "toolchain.llvm.targets.$target.sha256")"
+url="$(lock_value "$lock" "toolchain.llvm.targets.$target.url")"
 
-require_linux_amd64
-for command in curl install mktemp sha256sum tar; do
+for command in curl install mktemp tar; do
   require_command "$command"
 done
 
@@ -32,10 +32,10 @@ if [[ ! -f "$archive" ]]; then
   partial="$archive.partial"
   curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
     --output "$partial" "$url"
-  printf '%s  %s\n' "$expected_sha256" "$partial" | sha256sum --check --status
+  test "$(sha256_file "$partial")" = "$expected_sha256"
   mv "$partial" "$archive"
 fi
-printf '%s  %s\n' "$expected_sha256" "$archive" | sha256sum --check --status
+test "$(sha256_file "$archive")" = "$expected_sha256"
 
 extract_root="$(mktemp -d "$root/build/llvm-extract.XXXXXX")"
 cleanup() {

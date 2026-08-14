@@ -40,6 +40,35 @@ require_linux_amd64() {
   fi
 }
 
+require_darwin_arm64() {
+  local kernel machine
+  kernel="$(uname -s)"
+  machine="$(uname -m)"
+  if [[ "$kernel" != "Darwin" || "$machine" != "arm64" ]]; then
+    printf 'error: supported build host is Darwin arm64, got %s %s\n' "$kernel" "$machine" >&2
+    exit 1
+  fi
+}
+
+host_target() {
+  case "$(uname -s):$(uname -m)" in
+    Linux:x86_64) printf '%s\n' linux-amd64 ;;
+    Darwin:arm64) printf '%s\n' darwin-arm64 ;;
+    *)
+      printf 'error: unsupported host: %s %s\n' "$(uname -s)" "$(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
 checkout_pinned_repo() {
   local repository="$1"
   local commit="$2"

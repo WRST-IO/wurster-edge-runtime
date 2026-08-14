@@ -28,9 +28,20 @@ else
   printf 'warning: shellcheck not installed; skipping shell lint\n' >&2
 fi
 
-grep -Fxq '0.1.0-dev.1' "$root/VERSION"
-grep -Fq '"version": "0.1.0-dev.1"' "$root/runtime.lock.json"
-grep -Fq 'version = "0.1.0-dev.1"' "$root/packaging/edge-wasix/wasmer.toml"
+python3 - "$root" <<'PY'
+import json
+import pathlib
+import sys
+import tomllib
+
+root = pathlib.Path(sys.argv[1])
+version = (root / "VERSION").read_text(encoding="utf-8").strip()
+lock = json.loads((root / "runtime.lock.json").read_text(encoding="utf-8"))
+with (root / "packaging/edge-wasix/wasmer.toml").open("rb") as stream:
+    package = tomllib.load(stream)
+assert version == lock["bundle"]["version"] == package["package"]["version"]
+assert lock["bundle"]["targets"] == ["linux-amd64", "darwin-arm64"]
+PY
 if grep -Eq '^\[fs\]' "$root/packaging/edge-wasix/wasmer.toml"; then
   printf 'error: package manifest must not declare ambient filesystem mounts\n' >&2
   exit 1

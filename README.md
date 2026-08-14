@@ -1,60 +1,103 @@
-# Wurster Edge Runtime
+# WRST.IO Wurster Edge Runtime
 
-Pinned, self-contained Edge.js/WASIX/Wasmer runtime for Wurster Pigsty.
+This repository is the WRST.IO downstream fork and binary distribution of
+[Edge.js](https://github.com/wasmerio/edgejs) for the Wurster Pigsty runtime.
+It combines a small Wurster patch set with pinned Edge.js, Wasmer, shared N-API,
+LLVM, and wasixcc revisions. It is not an official Wasmer or upstream Edge.js
+release.
 
-The release artifact is intentionally an assembly of mutually tested upstream
-revisions rather than a pair of unrelated nightly ZIP files. It contains a
-native Linux `edge` launcher, a Wasmer CLI built with LLVM and the experimental
-V8 N-API host bridge, and the matching engine-free Edge WASIX guest.
+The result is one self-contained, offline-capable compatibility unit: a native
+`edge` launcher, a matching NAPI-enabled Wasmer host, and the engine-free
+Edge.js WASIX guest. See [FORK.md](FORK.md) for provenance, the exact downstream
+delta, and the update policy.
+
+## Supported release targets
+
+| Release asset | Status | Host |
+| --- | --- | --- |
+| `wurster-edge-runtime-linux-amd64.tar.gz` | release-gated | Linux x86-64 |
+| `wurster-edge-runtime-darwin-arm64.tar.gz` | release-gated | macOS Apple Silicon |
+| Windows amd64 | blocked upstream | not published |
+| macOS Intel | out of scope | not published |
+
+“Release-gated” means the archive is published only if that exact bundle passes
+the Pigsty safe-mode acceptance suite. Windows is not being labelled as
+supported prematurely: the pinned Wasmer build explicitly disables the
+required NAPI-V8 host feature on Windows and its matching V8 distribution has
+no Windows artifact. Details and the unblock criteria are in
+[docs/PLATFORMS.md](docs/PLATFORMS.md).
 
 ## Compatibility lock
 
-| Component | Revision | Why this revision |
+| Component | Revision | Role |
 | --- | --- | --- |
-| Edge.js | `1ca99ab4ff3d74bf5940177eb007457612d398e3` | Current upstream main used for the first Wurster bundle |
-| Wasmer | `9b8fdf1720d6671a3de76aa8727f84536979104f` | Exact host revision used by Edge's successful Linux V8/WASIX CI lane |
-| N-API | `c5b66fb9f5b1b997d5bdd463dc1a80bb174d4730` | Same submodule commit in both Edge and Wasmer |
-| wasixcc | `v0.4.3`, sysroot `v2026-07-30.1` | Edge upstream WASIX build toolchain |
+| Edge.js | `1ca99ab4ff3d74bf5940177eb007457612d398e3` | Node-compatible launcher and WASIX guest |
+| Wasmer | `9b8fdf1720d6671a3de76aa8727f84536979104f` | Native WASIX sandbox host |
+| N-API | `c5b66fb9f5b1b997d5bdd463dc1a80bb174d4730` | Identical ABI implementation in Edge and Wasmer |
+| wasixcc | `v0.4.3`, sysroot `v2026-07-30.1` | WASIX guest compiler |
+| LLVM | `22.1.8`, per-target checksums | Safe-mode execution backend |
+| V8 host build | `11.9.2`, per-target checksums | Wasmer NAPI-V8 bridge |
 
-The upstream Edge run for this pair completed 1,676 selected Node
-compatibility tests with zero failures, followed by its locale, framework, and
-standalone V8/WASIX gates. This repository adds Pigsty-specific offline and
-filesystem-boundary tests on the assembled artifact.
+`runtime.lock.json` is authoritative. Bundle versions are independent of Edge
+and Wasmer versions and select one complete compatibility lock.
+
+## Releases
+
+Normal branch and pull-request runs retain Actions artifacts for CI inspection.
+A Git tag matching `v$(cat VERSION)` runs every supported platform gate and,
+only after all pass, creates a GitHub Release containing:
+
+```text
+wurster-edge-runtime-linux-amd64.tar.gz
+wurster-edge-runtime-darwin-arm64.tar.gz
+SHA256SUMS
+```
+
+These GitHub Release assets are the final binaries for Wurster consumers. The
+release job downloads the already-tested archives, recomputes one authoritative
+checksum file, verifies it, and publishes all assets together. A partial
+platform release cannot be created by the workflow.
 
 ## Bundle layout
 
 ```text
-wurster-edge-runtime-linux-amd64/
+wurster-edge-runtime-<target>/
   bin/edge
   bin/wasmer
   share/edge-wasix/
     edgejs.wasm
     wasmer.toml
   manifest.json
+  runtime.lock.json
   LICENSES/
   README.md
 ```
 
+The WASIX guest is built once in the Linux job and reused byte-for-byte by the
+macOS host build. Native `edge` and `wasmer` binaries are built and tested on
+their target operating system.
+
 ## Build
 
-The supported build host is Ubuntu 24.04 on amd64. CI installs the pinned
-wasixcc action and then runs:
+CI is the supported reproducible build environment:
 
 ```bash
+# Ubuntu 24.04 x86-64, with pinned wasixcc installed
 ./scripts/build-linux-amd64.sh
-./scripts/verify-bundle.sh out/wurster-edge-runtime-linux-amd64
+
+# macOS 15 Apple Silicon, using the guest produced above
+./scripts/build-darwin-arm64.sh /path/to/edgejs.wasm
 ```
 
-The equivalent convenience targets are `make check`, `make fetch`, `make
-build`, and `make verify`.
-
-Build products are written under `out/`; source checkouts and compiler outputs
-stay under `build/`. The build requires network access. The resulting bundle
-does not.
+`make build` selects the supported target for the current host. Source
+checkouts and compiler output stay under `build/`; final bundles are written to
+`out/`. Building requires network access. Running the resulting bundle does
+not.
 
 ## Wurster integration
 
-Set absolute paths when launching Pigsty:
+Set absolute paths and enter the projected Wurst workspace before starting
+Pigsty:
 
 ```bash
 export WURSTER_EDGE_BIN=/opt/wurster-edge-runtime/bin/edge
@@ -64,34 +107,11 @@ cd /path/to/projected/wurst
 exec "$WURSTER_EDGE_BIN" --safe tool.js
 ```
 
-`--safe` mounts only the current working directory through Wasmer. The Wurster
-integration must therefore enter the projected `/wurst` workspace before
-launching Edge. A future explicit mount launcher can add read-only
-`/toolchain` and writable `/tmp`; those projections remain Wurster's job.
+Safe mode mounts only the current working directory. The downstream patch
+removes Edge upstream's unconditional network grant, assigns guest
+`HOME=/tmp`, and uses the bundled LLVM backend. There is no system-Node or
+host-shell fallback. Wurster remains responsible for projecting `/wurst`,
+read-only `/toolchain`, and writable `/tmp`.
 
-The Wurster patch removes Edge upstream's unconditional `--net` grant. Pigsty
-starts without a network capability and does not inherit the host's `HOME`;
-the guest receives `HOME=/tmp`. There is no system-Node or host-shell fallback.
-
-## Verification
-
-`scripts/verify-bundle.sh` checks:
-
-- the required Wasmer N-API feature markers;
-- local-only package references and all manifest hashes;
-- `process.version` through `edge --safe`;
-- synchronous `node:fs` directory, write, and read operations;
-- denial of a sentinel file outside the mounted working directory;
-- absence of host `node` and shell fallbacks, including an `execve` trace;
-- the exact safe-mode command contract, including absence of `--net`.
-
-CI is configured to repeat the runtime suite inside a Linux network namespace
-with no network interface route. See [SECURITY.md](SECURITY.md) for the boundary
-and known limitations, and [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) for the
-executable acceptance matrix.
-
-## Versioning
-
-Bundle versions are independent of Edge and Wasmer versions. A version selects
-one complete compatibility lock. Changing any pinned commit, toolchain, patch,
-or package manifest requires a new bundle version and a full Linux smoke run.
+See [SECURITY.md](SECURITY.md) for the boundary and known limitations and
+[docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) for the executable release gates.

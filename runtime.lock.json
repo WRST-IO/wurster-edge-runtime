@@ -2,8 +2,11 @@
   "schema": 1,
   "bundle": {
     "name": "wurster-edge-runtime",
-    "version": "0.1.0-dev.1",
-    "target": "linux-amd64"
+    "version": "0.1.0-dev.2",
+    "targets": [
+      "linux-amd64",
+      "darwin-arm64"
+    ]
   },
   "sources": {
     "edgejs": {
@@ -20,13 +23,37 @@
     }
   },
   "toolchain": {
-    "build_host": "ubuntu-24.04-amd64",
+    "build_hosts": {
+      "linux-amd64": "ubuntu-24.04-amd64",
+      "darwin-arm64": "macos-15-arm64"
+    },
     "rust": "1.95",
     "source_date_epoch": 1786578280,
     "llvm": {
       "version": "22.1.8",
-      "url": "https://github.com/wasmerio/llvm-custom-builds/releases/download/22.x/llvm-linux-amd64.tar.xz",
-      "sha256": "5fb1c687c5e895d517a23e7aabea9ec3557e3a3e33f8a8d3a8d21395157b3906"
+      "targets": {
+        "linux-amd64": {
+          "url": "https://github.com/wasmerio/llvm-custom-builds/releases/download/22.x/llvm-linux-amd64.tar.xz",
+          "sha256": "5fb1c687c5e895d517a23e7aabea9ec3557e3a3e33f8a8d3a8d21395157b3906"
+        },
+        "darwin-arm64": {
+          "url": "https://github.com/wasmerio/llvm-custom-builds/releases/download/22.x/llvm-darwin-aarch64.tar.xz",
+          "sha256": "f64460f6c8a28876737402542fc5b28bb1f4262cef85f799b65ce2a7ee6f8847"
+        }
+      }
+    },
+    "v8": {
+      "version": "11.9.2",
+      "targets": {
+        "linux-amd64": {
+          "url": "https://github.com/wasmerio/wasmer-v8-custom-builds/releases/download/11.9.2/v8-linux-amd64.tar.xz",
+          "sha256": "9d30957412adc9531bee513e0dbe110ec4a12a42db1bfd2bf7cd1e8ddf8402fa"
+        },
+        "darwin-arm64": {
+          "url": "https://github.com/wasmerio/wasmer-v8-custom-builds/releases/download/11.9.2/v8-darwin-arm64.tar.xz",
+          "sha256": "c401b53dc006c3c6b403d93c77bf3fc214d45e7a9d7d1641cfccab83ffa2cf43"
+        }
+      }
     },
     "wasixcc_action_commit": "8a505d4605b15fd466a3881d286582b23e4ffecb",
     "wasixcc_version": "v0.4.3",

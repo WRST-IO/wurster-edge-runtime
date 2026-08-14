@@ -7,14 +7,14 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/lib.sh"
 
 root="$(repo_root)"
-bundle="${1:-$root/out/wurster-edge-runtime-linux-amd64}"
+target="$(host_target)"
+bundle="${1:-$root/out/wurster-edge-runtime-$target}"
 bundle="$(cd "$bundle" && pwd)"
 edge="$bundle/bin/edge"
 wasmer="$bundle/bin/wasmer"
 package="$bundle/share/edge-wasix"
 
-require_linux_amd64
-for command in env file grep ln mktemp python3 strace; do
+for command in env file grep ln mktemp python3; do
   require_command "$command"
 done
 
@@ -25,8 +25,16 @@ for artifact in "$edge" "$wasmer" "$package/edgejs.wasm" "$package/wasmer.toml";
   fi
 done
 
-file "$edge" | grep -q 'ELF 64-bit.*x86-64'
-file "$wasmer" | grep -q 'ELF 64-bit.*x86-64'
+case "$target" in
+  linux-amd64)
+    file "$edge" | grep -q 'ELF 64-bit.*x86-64'
+    file "$wasmer" | grep -q 'ELF 64-bit.*x86-64'
+    ;;
+  darwin-arm64)
+    file "$edge" | grep -q 'Mach-O 64-bit executable arm64'
+    file "$wasmer" | grep -q 'Mach-O 64-bit executable arm64'
+    ;;
+esac
 
 version_detail="$($wasmer --version -v 2>&1)"
 printf '%s\n' "$version_detail"
@@ -43,6 +51,16 @@ if grep -Eq '^\[fs\]' "$package/wasmer.toml"; then
 fi
 
 python3 "$script_dir/verify-manifest.py" "$bundle"
+python3 - "$bundle/manifest.json" "$target" <<'PY'
+import json
+import sys
+
+manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+if manifest["target"] != sys.argv[2]:
+    raise SystemExit(
+        f"bundle target mismatch: manifest={manifest['target']} host={sys.argv[2]}"
+    )
+PY
 
 run_root="$(mktemp -d "${TMPDIR:-/tmp}/wurster-edge-verify.XXXXXX")"
 cleanup() {
@@ -115,17 +133,22 @@ EDGE_WASMER_PACKAGE="$package" \
 popd >/dev/null
 test ! -e "$run_root/host-node-marker"
 
-pushd "$run_root/sandbox" >/dev/null
-strace -f -qq -e trace=execve -o "$run_root/execve.trace" \
-  env WASMER_BIN="$wasmer" EDGE_WASMER_PACKAGE="$package" \
-  "$edge" --safe -e 'console.log("exec-boundary-ok")' \
-  | grep -Fxq 'exec-boundary-ok'
-popd >/dev/null
-grep -Fq "execve(\"$wasmer\"" "$run_root/execve.trace"
-if grep -Eq 'execve\("[^"]*/(node|nodejs|sh|bash)"' "$run_root/execve.trace"; then
-  printf 'error: safe mode executed a host Node or shell binary\n' >&2
-  grep -E 'execve\("[^"]*/(node|nodejs|sh|bash)"' "$run_root/execve.trace" >&2
-  exit 1
+trace_result='PATH poison'
+if [[ "$target" == linux-amd64 ]]; then
+  require_command strace
+  pushd "$run_root/sandbox" >/dev/null
+  strace -f -qq -e trace=execve -o "$run_root/execve.trace" \
+    env WASMER_BIN="$wasmer" EDGE_WASMER_PACKAGE="$package" \
+    "$edge" --safe -e 'console.log("exec-boundary-ok")' \
+    | grep -Fxq 'exec-boundary-ok'
+  popd >/dev/null
+  grep -Fq "execve(\"$wasmer\"" "$run_root/execve.trace"
+  if grep -Eq 'execve\("[^"]*/(node|nodejs|sh|bash)"' "$run_root/execve.trace"; then
+    printf 'error: safe mode executed a host Node or shell binary\n' >&2
+    grep -E 'execve\("[^"]*/(node|nodejs|sh|bash)"' "$run_root/execve.trace" >&2
+    exit 1
+  fi
+  trace_result='PATH poison + execve trace'
 fi
 
 # Intercept the launcher-to-Wasmer boundary. This guards the Wurster patch even
@@ -158,6 +181,6 @@ printf '%s\n' \
   '[ok] node:fs read/write: pigsty-ok' \
   '[ok] guest HOME: /tmp' \
   '[ok] parent and symlink filesystem escapes blocked' \
-  '[ok] no host Node or shell fallback (PATH poison + execve trace)' \
+  "[ok] no host Node or shell fallback ($trace_result)" \
   '[ok] local package and network-disabled safe command' \
   'All Wurster Edge Runtime smoke tests passed.'
