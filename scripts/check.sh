@@ -67,6 +67,12 @@ assert lock["bundle"]["targets"] == [
 assert lock["bundle"]["reserved_targets"] == ["web", "ios-arm64", "android-arm64"]
 assert lock["toolchain"]["v8"]["version"] == "13.6.233.17"
 assert lock["toolchain"]["v8"]["upstream_asset_release"] == "11.9.7"
+assert lock["toolchain"]["build_hosts"]["windows-amd64"] == "windows-2022-amd64"
+assert lock["toolchain"]["windows_msvc"] == {
+    "visual_studio": "2022",
+    "visual_studio_version": "17.x",
+    "platform_toolset": "v143",
+}
 assert set(lock["toolchain"]["v8"]["targets"]) == set(lock["bundle"]["targets"])
 assert set(lock["toolchain"]["wasmer_features"]) == set(lock["bundle"]["targets"])
 assert lock["toolchain"]["v8"]["targets"]["darwin-amd64"]["build"] == "source"
@@ -79,6 +85,12 @@ assert lock["toolchain"]["v8"]["targets"]["windows-amd64"]["builder_commit"] == 
 assert lock["toolchain"]["v8"]["targets"]["windows-amd64"]["depot_tools_commit"] == lock["sources"]["depot_tools"]["commit"]
 assert "llvm" not in lock["toolchain"]["wasmer_features"]["windows-amd64"]
 assert "v8" in lock["toolchain"]["wasmer_features"]["windows-amd64"]
+
+workflow = (root / ".github/workflows/build-release.yml").read_text(encoding="utf-8")
+assert "runs-on: windows-2022" in workflow
+assert "vsversion: '2022'" in workflow
+assert "RUSTUP_TOOLCHAIN: '1.95'" in workflow
+assert "GYP_MSVS_VERSION: '2022'" in workflow
 PY
 if grep -Eq '^\[fs\]' "$root/packaging/edge-wasix/wasmer.toml"; then
   printf 'error: package manifest must not declare ambient filesystem mounts\n' >&2

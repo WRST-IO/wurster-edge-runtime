@@ -46,12 +46,17 @@
       "linux-amd64": "ubuntu-24.04-amd64",
       "darwin-arm64": "macos-15-arm64",
       "darwin-amd64": "macos-15-intel",
-      "windows-amd64": "windows-2025-amd64"
+      "windows-amd64": "windows-2022-amd64"
     },
     "rust": "1.95",
     "xcode": "16.2 (16C5032a)",
     "windows_source_charset": "UTF-8 (/utf-8)",
     "windows_cxx_conformance": "C++20 with /Zc:__cplusplus and /EHsc",
+    "windows_msvc": {
+      "visual_studio": "2022",
+      "visual_studio_version": "17.x",
+      "platform_toolset": "v143"
+    },
     "source_date_epoch": 1786578280,
     "llvm": {
       "version": "22.1.8",

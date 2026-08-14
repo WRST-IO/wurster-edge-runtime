@@ -31,6 +31,23 @@ $V8Root = Join-Path $CheckoutRoot "v8"
 if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
     throw "V8 Windows build requires an AMD64 Windows host"
 }
+if ($env:VisualStudioVersion -notmatch '^17\.') {
+    throw "V8 13.6 requires Visual Studio 2022 (17.x), got $env:VisualStudioVersion"
+}
+if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+    throw "Visual Studio 2022 x64 cl.exe is not available"
+}
+if ($env:VSCMD_ARG_TGT_ARCH -ne "x64" -or
+    -not $env:VSINSTALLDIR -or -not $env:VCToolsInstallDir -or
+    -not $env:WindowsSdkDir) {
+    throw "Incomplete Visual Studio 2022 x64 build environment"
+}
+foreach ($Tool in @("link.exe", "lib.exe")) {
+    if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) {
+        throw "Visual Studio 2022 x64 tool is unavailable: $Tool"
+    }
+}
+$env:GYP_MSVS_VERSION = "2022"
 
 function Checkout-PinnedRepository {
     param([string]$Repository, [string]$Commit, [string]$Destination)

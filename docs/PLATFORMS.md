@@ -42,7 +42,9 @@ of the necessary pieces but do not connect them into a working safe runtime:
 The WRST.IO patches complete these paths. Windows uses Wasmer's supported V8
 WASM backend (`--v8`) instead of unavailable LLVM, while retaining the same
 NAPI import ABI and the byte-identical Edge WASIX guest used on Linux and macOS.
-The bundle is built natively on GitHub's Windows Server 2025 amd64 runner.
+The bundle is built natively on GitHub's Windows Server 2022 amd64 runner with
+Visual Studio 2022 (17.x/v143). V8 13.6 rejects Visual Studio 18, so both the
+runner image and the MSVC setup action are gated before the source sync begins.
 
 Relevant upstream evidence:
 
@@ -50,6 +52,8 @@ Relevant upstream evidence:
 - [shared NAPI Windows target matcher](https://github.com/wasmerio/napi/blob/c5b66fb9f5b1b997d5bdd463dc1a80bb174d4730/build.rs)
 - [V8 custom-build asset release 11.9.7](https://github.com/wasmerio/v8-custom-builds/releases/tag/11.9.7),
   whose verified internal engine version is `13.6.233.17`
+- [pinned V8 custom-build workflow](https://github.com/wasmerio/v8-custom-builds/blob/844d01dc10edaa0461715f484e06b004f1fd023e/.github/workflows/ci.yml),
+  which builds that Windows V8 revision on `windows-2022` with MSVC
 
 A Windows asset is released only when all of the following are true:
 

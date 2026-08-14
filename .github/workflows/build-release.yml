@@ -224,11 +224,13 @@ jobs:
 
   windows-amd64:
     needs: linux-amd64
-    runs-on: windows-2025
+    runs-on: windows-2022
     timeout-minutes: 240
     env:
       JOBS: '4'
       CARGO_INCREMENTAL: '0'
+      RUSTUP_TOOLCHAIN: '1.95'
+      GYP_MSVS_VERSION: '2022'
     steps:
       - name: Check out runtime repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -237,6 +239,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
         with:
           arch: x64
+          vsversion: '2022'
 
       - name: Require Windows amd64 runner
         shell: pwsh
@@ -246,8 +249,29 @@ jobs:
               $env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
             throw "Expected Windows amd64 runner"
           }
+          if ($env:VisualStudioVersion -notmatch '^17\.') {
+            throw "V8 13.6 requires Visual Studio 2022 (17.x), got $env:VisualStudioVersion"
+          }
+          if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+            throw "Visual Studio 2022 x64 cl.exe is not available"
+          }
+          if ($env:VSCMD_ARG_TGT_ARCH -ne 'x64' -or
+              -not $env:VSINSTALLDIR -or -not $env:VCToolsInstallDir -or
+              -not $env:WindowsSdkDir) {
+            throw "Incomplete Visual Studio 2022 x64 build environment"
+          }
+          foreach ($tool in @('link.exe', 'lib.exe')) {
+            if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+              throw "Visual Studio 2022 x64 tool is unavailable: $tool"
+            }
+          }
+          if ($env:GYP_MSVS_VERSION -ne '2022') {
+            throw "Pinned V8 build requires GYP_MSVS_VERSION=2022"
+          }
           git config --global core.longpaths true
           rustup toolchain install 1.95 --profile minimal
+          rustc --version
+          cargo --version
           cmake --version
           ninja --version
 
