@@ -1,0 +1,52 @@
+--- a/scripts/generate_builtin_catalog_header.py
++++ b/scripts/generate_builtin_catalog_header.py
+@@ -16,6 +16,11 @@
+     "v8/tools",
+ )
+ 
++# MSVC versions before 14.51 reject individual string literal tokens around
++# 16 KiB even though adjacent literals may concatenate to a larger string.
++# Keep a wide safety margin and split on Unicode code point boundaries.
++MSVC_STRING_LITERAL_CHUNK_BYTES = 8192
++
+ 
+ def strip_builtin_extension(path: Path) -> str:
+     text = path.as_posix()
+@@ -26,11 +31,36 @@
+     raise ValueError(f"unsupported builtin extension: {path}")
+ 
+ 
++def split_utf8_chunks(
++    text: str, max_bytes: int = MSVC_STRING_LITERAL_CHUNK_BYTES
++) -> list[str]:
++    if max_bytes <= 0:
++        raise ValueError("max_bytes must be positive")
++
++    chunks: list[str] = []
++    current: list[str] = []
++    current_bytes = 0
++    for char in text:
++        char_bytes = len(char.encode("utf-8"))
++        if current and current_bytes + char_bytes > max_bytes:
++            chunks.append("".join(current))
++            current = []
++            current_bytes = 0
++        current.append(char)
++        current_bytes += char_bytes
++
++    if current or not chunks:
++        chunks.append("".join(current))
++    return chunks
++
++
+ def make_raw_string_literal(text: str) -> str:
+     delimiter = f"E{hashlib.sha256(text.encode('utf-8')).hexdigest()[:7]}"
+     while f"){delimiter}\"" in text:
+         delimiter += "_X"
+-    return f'R"{delimiter}({text}){delimiter}"'
++    return " ".join(
++        f'R"{delimiter}({chunk}){delimiter}"' for chunk in split_utf8_chunks(text)
++    )
+ 
+ 
+ def collect_builtin_entries(project_root: Path) -> list[dict[str, object]]:
