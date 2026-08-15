@@ -96,6 +96,7 @@ function Assert-CompleteV8Sdk {
         "include/v8.h",
         "include/v8-version.h",
         "include/cppgc/allocation.h",
+        "include/cppgc/internal/api-constants.h",
         "include/wasm-c-api/wasm.h",
         "lib/v8.lib"
     )) {
@@ -106,11 +107,120 @@ function Assert-CompleteV8Sdk {
     Assert-V8Version (Join-Path $SdkRoot "include")
 }
 
+function Invoke-BoundedNative {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds,
+        [string]$Description
+    )
+
+    Write-Host ">>> $Description (timeout ${TimeoutSeconds}s)"
+    $StartedAt = [DateTime]::UtcNow
+    $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $StartInfo.FileName = $FilePath
+    $StartInfo.UseShellExecute = $false
+    foreach ($Argument in $Arguments) {
+        [void]$StartInfo.ArgumentList.Add([string]$Argument)
+    }
+
+    $Process = [System.Diagnostics.Process]::new()
+    $Process.StartInfo = $StartInfo
+    try {
+        if (-not $Process.Start()) {
+            throw "failed to start $Description"
+        }
+        if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+            try { $Process.Kill($true) } catch { }
+            $Process.WaitForExit()
+            throw "$Description exceeded hard timeout of ${TimeoutSeconds}s"
+        }
+        if ($Process.ExitCode -ne 0) {
+            throw "$Description failed with exit code $($Process.ExitCode)"
+        }
+    } finally {
+        $Process.Dispose()
+    }
+    $Elapsed = [Math]::Round(([DateTime]::UtcNow - $StartedAt).TotalSeconds, 1)
+    Write-Host "<<< $Description complete in ${Elapsed}s"
+}
+
+function Hydrate-PinnedCppgcHeaders {
+    param([string]$DestinationInclude)
+
+    # The audited 11.9.7 Windows archive contains the built V8 library and the
+    # patched wasm C API header, but its packaging omits the public cppgc tree.
+    # Do not sparse-fetch the enormous V8 Git repository here. Enumerate only
+    # include/cppgc from GitHub's V8 mirror at the exact pinned commit, download
+    # those tiny headers, and verify every file against its Git blob SHA.
+    $ApiHeaders = @{
+        "Accept" = "application/vnd.github+json"
+        "X-GitHub-Api-Version" = "2022-11-28"
+        "User-Agent" = "wurster-edge-runtime-ci"
+    }
+    $Deadline = [DateTime]::UtcNow.AddMinutes(5)
+    $Queue = [System.Collections.Generic.Queue[string]]::new()
+    $Queue.Enqueue("include/cppgc")
+    $Downloaded = 0
+
+    Write-Host ">>> Hydrating pinned cppgc headers from V8 $ExpectedCommit (hard total budget 300s)"
+    while ($Queue.Count -gt 0) {
+        $Remaining = [int][Math]::Floor(($Deadline - [DateTime]::UtcNow).TotalSeconds)
+        if ($Remaining -le 0) {
+            throw "cppgc header hydration exceeded hard total timeout of 300s"
+        }
+
+        $RemoteDirectory = $Queue.Dequeue()
+        Write-Host "Listing $RemoteDirectory"
+        $ApiUrl = "https://api.github.com/repos/v8/v8/contents/$RemoteDirectory`?ref=$ExpectedCommit"
+        $RequestTimeout = [Math]::Max(5, [Math]::Min(60, $Remaining))
+        $Items = @(Invoke-RestMethod -Uri $ApiUrl -Headers $ApiHeaders -TimeoutSec $RequestTimeout)
+
+        foreach ($Item in $Items) {
+            if ($Item.type -eq "dir") {
+                $Queue.Enqueue([string]$Item.path)
+                continue
+            }
+            if ($Item.type -ne "file" -or -not ([string]$Item.name).EndsWith(".h", [StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+            if (-not $Item.download_url -or -not ([string]$Item.path).StartsWith("include/", [StringComparison]::Ordinal)) {
+                throw "invalid pinned V8 header metadata for $($Item.path)"
+            }
+
+            $Remaining = [int][Math]::Floor(($Deadline - [DateTime]::UtcNow).TotalSeconds)
+            if ($Remaining -le 0) {
+                throw "cppgc header hydration exceeded hard total timeout of 300s"
+            }
+            $RequestTimeout = [Math]::Max(5, [Math]::Min(45, $Remaining))
+
+            $Destination = $DestinationInclude
+            foreach ($Part in ([string]$Item.path).Substring("include/".Length).Split('/')) {
+                $Destination = Join-Path $Destination $Part
+            }
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Destination) | Out-Null
+            Invoke-WebRequest -Uri ([string]$Item.download_url) -Headers @{ "User-Agent" = "wurster-edge-runtime-ci" } `
+                -OutFile $Destination -TimeoutSec $RequestTimeout
+
+            $ActualBlobSha = (& git hash-object -- $Destination).Trim()
+            if ($ActualBlobSha -ne [string]$Item.sha) {
+                throw "V8 header blob mismatch for $($Item.path): expected $($Item.sha), got $ActualBlobSha"
+            }
+            $Downloaded++
+        }
+    }
+
+    if ($Downloaded -eq 0) {
+        throw "cppgc header hydration downloaded no headers"
+    }
+    Write-Host "<<< Hydrated and blob-verified $Downloaded cppgc headers"
+}
+
 function Provision-PinnedReleaseSdk {
     # Release 11.9.7 was produced from exactly the builder and V8 revisions
     # pinned by runtime.lock.json. Its Windows archive contains the built
     # wee8/v8 library and patched wasm C API header, but its upstream packaging
-    # omitted public cppgc headers. Hydrate the complete public include tree
+    # omitted public cppgc headers. Hydrate only that missing public header tree
     # from the exact V8 commit instead of recompiling V8 for several hours.
     $AssetRelease = "11.9.7"
     $AssetSha256 = "2aee8b6c3e8cecae2ce0325ac01b9bcaea4bef49e8f2aac599e1729d60c17285"
@@ -138,6 +248,7 @@ function Provision-PinnedReleaseSdk {
     $AssetUrl = "https://github.com/wasmerio/v8-custom-builds/releases/download/$AssetRelease/v8-windows-amd64.tar.xz"
 
     if (Test-Path -LiteralPath $Archive) {
+        Write-Host ">>> Verifying existing pinned Windows V8 release archive"
         $ExistingSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
         if ($ExistingSha -ne $AssetSha256) {
             Remove-Item -LiteralPath $Archive -Force
@@ -147,8 +258,13 @@ function Provision-PinnedReleaseSdk {
         $Partial = "$Archive.partial"
         Remove-Item -LiteralPath $Partial -Force -ErrorAction SilentlyContinue
         try {
-            & curl.exe --fail --location --proto "=https" --tlsv1.2 --retry 3 `
-                --output $Partial $AssetUrl
+            Invoke-BoundedNative -FilePath (Get-Command curl.exe -ErrorAction Stop).Source `
+                -Arguments @(
+                    "--fail", "--location", "--proto", "=https", "--tlsv1.2",
+                    "--retry", "3", "--retry-delay", "2", "--connect-timeout", "30",
+                    "--max-time", "600", "--output", $Partial, $AssetUrl
+                ) -TimeoutSeconds 620 -Description "Download pinned Windows V8 release archive"
+            Write-Host ">>> Verifying downloaded Windows V8 SHA-256"
             $DownloadedSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Partial).Hash.ToLowerInvariant()
             if ($DownloadedSha -ne $AssetSha256) {
                 throw "Windows V8 release asset checksum mismatch: expected $AssetSha256, got $DownloadedSha"
@@ -158,6 +274,7 @@ function Provision-PinnedReleaseSdk {
             Remove-Item -LiteralPath $Partial -Force -ErrorAction SilentlyContinue
         }
     }
+    Write-Host ">>> Verifying pinned Windows V8 archive before extraction"
     $ActualSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
     if ($ActualSha -ne $AssetSha256) {
         throw "Windows V8 release asset checksum mismatch: expected $AssetSha256, got $ActualSha"
@@ -169,14 +286,11 @@ function Provision-PinnedReleaseSdk {
     }
     New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 
-    $HeaderRootBase = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $OutputParent }
-    $HeaderRoot = Join-Path $HeaderRootBase "wurster-v8-public-headers-$Version"
-    if (Test-Path -LiteralPath $HeaderRoot) {
-        Remove-Item -LiteralPath $HeaderRoot -Recurse -Force
-    }
-
     try {
-        & tar.exe -xJf $Archive -C $Stage
+        Invoke-BoundedNative -FilePath (Get-Command tar.exe -ErrorAction Stop).Source `
+            -Arguments @("-xJf", $Archive, "-C", $Stage) `
+            -TimeoutSeconds 300 -Description "Extract pinned Windows V8 release archive"
+
         foreach ($RelativePath in @("include/v8.h", "include/wasm-c-api/wasm.h", "lib/v8.lib")) {
             if (-not (Test-Path -LiteralPath (Join-Path $Stage $RelativePath))) {
                 throw "Pinned upstream Windows V8 archive is missing expected payload: $RelativePath"
@@ -184,27 +298,17 @@ function Provision-PinnedReleaseSdk {
         }
         Assert-V8Version (Join-Path $Stage "include")
 
-        New-Item -ItemType Directory -Force -Path $HeaderRoot | Out-Null
-        & git init -q $HeaderRoot
-        & git -C $HeaderRoot remote add origin $Lock.sources.v8.repository
-        & git -C $HeaderRoot sparse-checkout init --cone
-        & git -C $HeaderRoot sparse-checkout set include
-        & git -C $HeaderRoot fetch --depth 1 --filter=blob:none origin $ExpectedCommit
-        & git -C $HeaderRoot checkout -q --detach FETCH_HEAD
-        if ((& git -C $HeaderRoot rev-parse HEAD) -ne $ExpectedCommit) {
-            throw "failed to hydrate public V8 headers from pinned commit $ExpectedCommit"
-        }
-
-        Copy-Item (Join-Path $HeaderRoot "include/*") (Join-Path $Stage "include") -Recurse -Force
+        Hydrate-PinnedCppgcHeaders (Join-Path $Stage "include")
         Assert-CompleteV8Sdk $Stage
 
         if (Test-Path -LiteralPath $Output) {
             throw "refusing to overwrite existing V8 output: $Output"
         }
+        Write-Host ">>> Publishing completed Windows V8 SDK to $Output"
         Move-Item -LiteralPath $Stage -Destination $Output
         Assert-CompleteV8Sdk $Output
+        Write-Host "<<< Windows V8 SDK ready: $Output"
     } finally {
-        Remove-Item -LiteralPath $HeaderRoot -Recurse -Force -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $Stage) {
             Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
         }
