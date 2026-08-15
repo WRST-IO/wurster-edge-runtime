@@ -76,14 +76,20 @@ try {
         "-DCMAKE_CXX_FLAGS=/utf-8 /Zc:__cplusplus /EHsc" `
         -DEDGE_BUILD_NAPI_TESTS=OFF
 
-    # Compile the translation units that have exposed MSVC-only porting bugs
-    # before launching the full ~2k-object graph. Ninja reuses these objects in
-    # the full build, so a passing build pays essentially no duplicate work.
-    Write-Host ">>> Preflighting Windows-sensitive C++ translation units"
-    & $SystemNinja -C $EdgeBuild `
-        "napi-v8/CMakeFiles/napi_v8.dir/src/js_native_api_v8.cc.obj" `
-        "napi-v8/CMakeFiles/napi_v8.dir/src/unofficial_napi.cc.obj" `
-        "CMakeFiles/edge_ncrypto.dir/deps/ncrypto/ncrypto.cc.obj"
+    # Compile all Edge-owned native C++ surfaces before the large vendored
+    # dependency graph. A successful preflight is reused by Ninja in the full
+    # build, while Windows-only porting failures surface near the start.
+    Write-Host ">>> Preflighting Edge.js Windows C++ surfaces"
+    & cmake --build $EdgeBuild --parallel $Jobs --target `
+        napi_v8 `
+        edge_ncrypto `
+        edge_environment_core `
+        edge_node_api `
+        edge_binding_registry `
+        edge_loader `
+        edge_runtime_core `
+        edge_bindings `
+        edge_crypto
 
     & cmake --build $EdgeBuild --parallel $Jobs
 
