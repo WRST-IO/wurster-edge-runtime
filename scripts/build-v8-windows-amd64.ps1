@@ -234,10 +234,14 @@ function Provision-PinnedReleaseSdk {
         throw "Pinned Windows V8 release provisioner no longer matches runtime.lock.json; update its audited asset pins before continuing"
     }
 
-    foreach ($Tool in @("curl.exe", "tar.exe", "git.exe")) {
+    foreach ($Tool in @("curl.exe", "git.exe")) {
         if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) {
             throw "Windows V8 release provisioner requires $Tool"
         }
+    }
+    $GitBash = Join-Path $env:ProgramFiles "Git\bin\bash.exe"
+    if (-not (Test-Path -LiteralPath $GitBash)) {
+        throw "Windows V8 release provisioner requires Git for Windows Bash at $GitBash"
     }
 
     $OutputParent = Split-Path -Parent $Output
@@ -287,9 +291,33 @@ function Provision-PinnedReleaseSdk {
     New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 
     try {
-        Invoke-BoundedNative -FilePath (Get-Command tar.exe -ErrorAction Stop).Source `
-            -Arguments @("-xJf", $Archive, "-C", $Stage) `
-            -TimeoutSeconds 300 -Description "Extract pinned Windows V8 release archive"
+        # The pinned upstream Windows archive is created on windows-2022 from a
+        # Git Bash step using GNU tar + xz. Extract it with the same tool family
+        # rather than Windows' System32 tar/libarchive, which hangs on this
+        # exact archive on GitHub's windows-2022 runner.
+        $BashExtract = @'
+set -euo pipefail
+printf 'bash: %s\n' "$BASH_VERSION"
+printf 'tar: '
+command -v tar
+tar --version | head -n 1
+printf 'xz: '
+command -v xz
+xz --version | head -n 1
+archive="$(cygpath -u "$WURSTER_V8_ARCHIVE")"
+stage="$(cygpath -u "$WURSTER_V8_STAGE")"
+tar -xJf "$archive" -C "$stage"
+'@
+        $env:WURSTER_V8_ARCHIVE = $Archive
+        $env:WURSTER_V8_STAGE = $Stage
+        try {
+            Invoke-BoundedNative -FilePath $GitBash `
+                -Arguments @("--noprofile", "--norc", "-c", $BashExtract) `
+                -TimeoutSeconds 300 -Description "Extract pinned Windows V8 release archive with Git Bash GNU tar"
+        } finally {
+            Remove-Item Env:WURSTER_V8_ARCHIVE -ErrorAction SilentlyContinue
+            Remove-Item Env:WURSTER_V8_STAGE -ErrorAction SilentlyContinue
+        }
 
         foreach ($RelativePath in @("include/v8.h", "include/wasm-c-api/wasm.h", "lib/v8.lib")) {
             if (-not (Test-Path -LiteralPath (Join-Path $Stage $RelativePath))) {
