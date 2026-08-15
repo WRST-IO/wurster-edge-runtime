@@ -1,0 +1,80 @@
+diff --git a/v8/src/unofficial_napi.cc b/v8/src/unofficial_napi.cc
+--- a/v8/src/unofficial_napi.cc
++++ b/v8/src/unofficial_napi.cc
+@@ -486,16 +486,33 @@ size_t NearHeapLimitCallback(void* raw_env,
+ // predates the context (mixed provenance) and must go to the legacy backing
+ // allocator. Weak fallbacks keep embedders without the Rust host (e.g. the
+ // native edgejs build) linking; no context is ever installed there.
++#if defined(_MSC_VER) && !defined(EDGE_BUNDLED_NAPI_V8)
++// MSVC has no ELF-style weak function definitions. The Rust-host build
++// provides these symbols as strong #[no_mangle] exports, so only declare them
++// here and let the final Rust link resolve them.
++extern "C" void* napi_host_guest_heap_alloc(const void* ctx, size_t length,
++                                             int zero);
++extern "C" int napi_host_guest_heap_free(const void* ctx, void* data,
++                                          size_t length);
++extern "C" void napi_host_guest_heap_release(void* ctx);
++#else
++#if defined(_MSC_VER)
++#define NAPI_GUEST_HEAP_WEAK
++#else
++#define NAPI_GUEST_HEAP_WEAK __attribute__((weak))
++#endif
+-extern "C" __attribute__((weak)) void* napi_host_guest_heap_alloc(
++extern "C" NAPI_GUEST_HEAP_WEAK void* napi_host_guest_heap_alloc(
+     const void* /*ctx*/, size_t /*length*/, int /*zero*/) {
+   return nullptr;
+ }
+-extern "C" __attribute__((weak)) int napi_host_guest_heap_free(
++extern "C" NAPI_GUEST_HEAP_WEAK int napi_host_guest_heap_free(
+     const void* /*ctx*/, void* /*data*/, size_t /*length*/) {
+   return 0;
+ }
+-extern "C" __attribute__((weak)) void napi_host_guest_heap_release(
++extern "C" NAPI_GUEST_HEAP_WEAK void napi_host_guest_heap_release(
+     void* /*ctx*/) {}
++#undef NAPI_GUEST_HEAP_WEAK
++#endif
+ 
+ class TrackingArrayBufferAllocator final : public v8::ArrayBuffer::Allocator {
+  public:
+diff --git a/src/napi_bridge_init.cc b/src/napi_bridge_init.cc
+--- a/src/napi_bridge_init.cc
++++ b/src/napi_bridge_init.cc
+@@ -1404,8 +1404,12 @@ extern "C" int snapi_bridge_create_arraybuffer(SnapiEnvState* env_state, uint32_t byte_length,
+ // back to the guest heap and drops the boxed hint. Weak no-op fallback keeps
+ // embedders without the Rust host linking (they never create finalized
+ // externals).
++#if defined(_MSC_VER)
++extern "C" void napi_host_guest_heap_buffer_finalize(void* data, void* hint);
++#else
+ extern "C" __attribute__((weak)) void napi_host_guest_heap_buffer_finalize(
+     void* /*data*/, void* /*hint*/) {}
++#endif
+ 
+ namespace {
+ void GuestHeapBufferFinalizeTrampoline(node_api_basic_env /*env*/, void* data,
+diff --git a/build.rs b/build.rs
+--- a/build.rs
++++ b/build.rs
+@@ -216,6 +216,8 @@ fn main() {
+         println!("cargo:rustc-link-lib=winmm");
+         println!("cargo:rustc-link-lib=dbghelp");
+         println!("cargo:rustc-link-lib=shlwapi");
++        println!("cargo:rustc-link-lib=ws2_32");
++        println!("cargo:rustc-link-lib=advapi32");
+     } else if target_os == "macos" || target_os == "ios" {
+         println!("cargo:rustc-link-lib=dylib=c++");
+     } else {
+diff --git a/v8/CMakeLists.txt b/v8/CMakeLists.txt
+--- a/v8/CMakeLists.txt
++++ b/v8/CMakeLists.txt
+@@ -91,7 +91,7 @@ if(NAPI_V8_EXTRA_LIBS)
+   target_link_libraries(napi_v8 PUBLIC ${NAPI_V8_EXTRA_LIBS})
+ endif()
+ if(WIN32)
+-  target_link_libraries(napi_v8 PUBLIC winmm dbghelp shlwapi)
++  target_link_libraries(napi_v8 PUBLIC winmm dbghelp shlwapi ws2_32 advapi32)
+ endif()
+ if(NAPI_V8_BUILD_TESTS)
+   enable_testing()

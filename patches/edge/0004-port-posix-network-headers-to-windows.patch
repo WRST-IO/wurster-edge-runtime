@@ -1,0 +1,78 @@
+diff --git a/src/edge_runtime.cc b/src/edge_runtime.cc
+--- a/src/edge_runtime.cc
++++ b/src/edge_runtime.cc
+@@ -19,7 +19,12 @@
+ #include <unordered_map>
+ #include <unordered_set>
+ #include <vector>
++#if defined(_WIN32)
++#include <winsock2.h>
++#include <ws2tcpip.h>
++#else
+ #include <arpa/inet.h>
++#endif
+ #include <cerrno>
+ #include <csignal>
+ 
+diff --git a/src/edge_tcp_wrap.cc b/src/edge_tcp_wrap.cc
+--- a/src/edge_tcp_wrap.cc
++++ b/src/edge_tcp_wrap.cc
+@@ -1,6 +1,11 @@
+ #include "edge_tcp_wrap.h"
+ 
++#if defined(_WIN32)
++#include <winsock2.h>
++#include <ws2tcpip.h>
++#else
+ #include <arpa/inet.h>
++#endif
+ 
+ #include <cstddef>
+ #include <cstdint>
+diff --git a/src/edge_udp_wrap.cc b/src/edge_udp_wrap.cc
+--- a/src/edge_udp_wrap.cc
++++ b/src/edge_udp_wrap.cc
+@@ -1,6 +1,11 @@
+ #include "edge_udp_wrap.h"
+ 
++#if defined(_WIN32)
++#include <winsock2.h>
++#include <ws2tcpip.h>
++#else
+ #include <arpa/inet.h>
++#endif
+ 
+ #include <climits>
+ #include <cerrno>
+diff --git a/src/edge_js_udp_wrap.cc b/src/edge_js_udp_wrap.cc
+--- a/src/edge_js_udp_wrap.cc
++++ b/src/edge_js_udp_wrap.cc
+@@ -1,7 +1,12 @@
+ #include "edge_js_udp_wrap.h"
+ 
+ #include <algorithm>
++#if defined(_WIN32)
++#include <winsock2.h>
++#include <ws2tcpip.h>
++#else
+ #include <arpa/inet.h>
++#endif
+ #include <cstdint>
+ #include <cstring>
+ #include <string>
+diff --git a/src/edge_cares_wrap.cc b/src/edge_cares_wrap.cc
+--- a/src/edge_cares_wrap.cc
++++ b/src/edge_cares_wrap.cc
+@@ -1,7 +1,12 @@
+ #include "edge_cares_wrap.h"
+ 
++#if defined(_WIN32)
++#include <winsock2.h>
++#include <ws2tcpip.h>
++#else
+ #include <arpa/inet.h>
+ #include <netdb.h>
++#endif
+ 
+ #include <algorithm>
+ #include <cstdint>

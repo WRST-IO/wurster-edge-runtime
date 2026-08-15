@@ -1,0 +1,168 @@
+diff --git a/src/edge_compat_exec.cc b/src/edge_compat_exec.cc
+index 022cff91..eabe396f 100644
+--- a/src/edge_compat_exec.cc
++++ b/src/edge_compat_exec.cc
+@@ -1,5 +1,6 @@
+ #include "edge_compat_exec.h"
+ 
++#include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
+ #include <filesystem>
+@@ -10,6 +11,8 @@
+ 
+ #if defined(_WIN32)
+ #include <errno.h>
++#include <fcntl.h>
++#include <io.h>
+ #include <process.h>
+ #else
+ #include <errno.h>
+@@ -101,10 +104,16 @@ std::vector<std::string> BuildDefaultSafeModeCommand(std::string_view wasmer_bin
+   return {
+       resolved_wasmer_bin,
+       "run",
++#if defined(_WIN32)
++      "--v8",
++#else
++      "--llvm",
++#endif
+       "--experimental-napi",
+       resolved_wasmer_package,
+       "--volume=.",
+-      "--net",
++      "--env",
++      "HOME=/tmp",
+       "--",
+   };
+ }
+@@ -139,6 +148,87 @@ CommandResult RunCommandCapture(const std::vector<std::string>& command) {
+     return result;
+   }
+ 
++#if defined(_WIN32)
++  int stdout_pipe[2] = {-1, -1};
++  int stderr_pipe[2] = {-1, -1};
++  if (_pipe(stdout_pipe, 4096, _O_BINARY) != 0 ||
++      _pipe(stderr_pipe, 4096, _O_BINARY) != 0) {
++    const int pipe_errno = errno;
++    for (int fd : stdout_pipe) {
++      if (fd >= 0) _close(fd);
++    }
++    for (int fd : stderr_pipe) {
++      if (fd >= 0) _close(fd);
++    }
++    result.stderr_output = std::strerror(pipe_errno);
++    return result;
++  }
++
++  const int stdout_fd = _fileno(stdout);
++  const int stderr_fd = _fileno(stderr);
++  const int saved_stdout = _dup(stdout_fd);
++  const int saved_stderr = _dup(stderr_fd);
++  if (saved_stdout < 0 || saved_stderr < 0) {
++    const int dup_errno = errno;
++    if (saved_stdout >= 0) _close(saved_stdout);
++    if (saved_stderr >= 0) _close(saved_stderr);
++    for (int fd : stdout_pipe) _close(fd);
++    for (int fd : stderr_pipe) _close(fd);
++    result.stderr_output = std::strerror(dup_errno);
++    return result;
++  }
++
++  std::fflush(nullptr);
++  if (_dup2(stdout_pipe[1], stdout_fd) != 0 ||
++      _dup2(stderr_pipe[1], stderr_fd) != 0) {
++    const int dup_errno = errno;
++    (void)_dup2(saved_stdout, stdout_fd);
++    (void)_dup2(saved_stderr, stderr_fd);
++    _close(saved_stdout);
++    _close(saved_stderr);
++    for (int fd : stdout_pipe) _close(fd);
++    for (int fd : stderr_pipe) _close(fd);
++    result.stderr_output = std::strerror(dup_errno);
++    return result;
++  }
++  _close(stdout_pipe[1]);
++  _close(stderr_pipe[1]);
++
++  std::vector<const char*> argv;
++  argv.reserve(command.size() + 1);
++  for (const auto& arg : command) argv.push_back(arg.c_str());
++  argv.push_back(nullptr);
++
++  const intptr_t rc = _spawnvp(_P_WAIT, argv[0], argv.data());
++  const int spawn_errno = errno;
++  std::fflush(nullptr);
++  (void)_dup2(saved_stdout, stdout_fd);
++  (void)_dup2(saved_stderr, stderr_fd);
++  _close(saved_stdout);
++  _close(saved_stderr);
++
++  char buffer[512];
++  while (true) {
++    const int n = _read(stdout_pipe[0], buffer, sizeof(buffer));
++    if (n <= 0) break;
++    result.stdout_output.append(buffer, static_cast<size_t>(n));
++  }
++  while (true) {
++    const int n = _read(stderr_pipe[0], buffer, sizeof(buffer));
++    if (n <= 0) break;
++    result.stderr_output.append(buffer, static_cast<size_t>(n));
++  }
++  _close(stdout_pipe[0]);
++  _close(stderr_pipe[0]);
++
++  if (rc == -1) {
++    result.exec_errno = spawn_errno;
++    result.stderr_output = std::strerror(spawn_errno);
++    return result;
++  }
++  result.exit_code = static_cast<int>(rc);
++  return result;
++#else
+   int stdout_pipe[2] = {-1, -1};
+   int stderr_pipe[2] = {-1, -1};
+   int exec_error_pipe[2] = {-1, -1};
+@@ -241,6 +331,7 @@ CommandResult RunCommandCapture(const std::vector<std::string>& command) {
+   }
+ 
+   return result;
++#endif
+ }
+ 
+ int RunCommandPassthrough(const std::vector<std::string>& command, std::string* error_out) {
+@@ -249,6 +340,25 @@ int RunCommandPassthrough(const std::vector<std::string>& command, std::string*
+     return 1;
+   }
+ 
++#if defined(_WIN32)
++  std::vector<const char*> argv;
++  argv.reserve(command.size() + 1);
++  for (const auto& arg : command) argv.push_back(arg.c_str());
++  argv.push_back(nullptr);
++
++  const intptr_t rc = _spawnvp(_P_WAIT, argv[0], argv.data());
++  if (rc == -1) {
++    if (error_out != nullptr) {
++      if (errno == ENOENT) {
++        *error_out = "safe mode requires a valid Wasmer binary: " + command[0];
++      } else {
++        *error_out = "failed to start Wasmer: " + std::string(std::strerror(errno));
++      }
++    }
++    return 1;
++  }
++  return static_cast<int>(rc);
++#else
+   int exec_error_pipe[2] = {-1, -1};
+   if (pipe(exec_error_pipe) != 0) {
+     if (error_out != nullptr) {
+@@ -312,6 +422,7 @@ int RunCommandPassthrough(const std::vector<std::string>& command, std::string*
+     *error_out = "safe mode command ended unexpectedly";
+   }
+   return 1;
++#endif
+ }
+ 
+ }  // namespace

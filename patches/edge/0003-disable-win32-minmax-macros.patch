@@ -1,0 +1,28 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,6 +1,12 @@
+ cmake_minimum_required(VERSION 3.20)
+ project(edge LANGUAGES C CXX)
+ 
++if(WIN32)
++  # windows.h defines min/max macros unless NOMINMAX is set. Those macros
++  # corrupt std::min/std::max expressions in ncrypto and other C++ targets.
++  add_compile_definitions(NOMINMAX)
++endif()
++
+ set(CMAKE_CXX_STANDARD 20)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ set(CMAKE_CXX_EXTENSIONS OFF)
+diff --git a/deps/ncrypto/ncrypto.cc b/deps/ncrypto/ncrypto.cc
+--- a/deps/ncrypto/ncrypto.cc
++++ b/deps/ncrypto/ncrypto.cc
+@@ -480,7 +480,7 @@ bool BignumPointer::generate(const PrimeConfig& params,
+   if (innerCb != nullptr) {
+     cb = BignumGenCallbackPointer(BN_GENCB_new());
+     if (!cb) [[unlikely]]
+-      return -1;
++      return false;
+     BN_GENCB_set(
+         cb.get(),
+         [](int a, int b, BN_GENCB* ctx) mutable -> int {

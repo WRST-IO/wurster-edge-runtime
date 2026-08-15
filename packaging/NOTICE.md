@@ -1,7 +1,7 @@
 # Notices
 
-This bundle combines unmodified upstream components plus the patch recorded in
-`manifest.json`:
+This WRST.IO downstream bundle combines pinned upstream source trees with the
+Wurster patch recorded in `manifest.json`:
 
 - Edge.js and its bundled Node-compatible dependencies;
 - Wasmer and its Rust dependencies;
@@ -14,3 +14,4 @@ preserved below `LICENSES/edgejs/` and `LICENSES/wasmer/`. The generated
 and source/repository identifiers for the Wasmer build graph.
 
 This notice is informational and does not replace the upstream license texts.
+This bundle is not an official Wasmer or upstream Edge.js release.

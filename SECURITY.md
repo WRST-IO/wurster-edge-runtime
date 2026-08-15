@@ -30,3 +30,8 @@ audited by this project. Treat a change to Edge, Wasmer, N-API, wasixcc, the
 sysroot, or the Wurster patch as an ABI/security change requiring a new bundle
 and complete verification.
 
+These invariants apply to every future host, including browser Workers and
+embedded mobile libraries. Native process spawning is not the boundary and is
+not required by the platform-neutral host contract. Hosts must fail closed when
+they cannot enforce Wurster's mounts, network policy, or requested resource
+limits. See [docs/HOST_CONTRACT.md](docs/HOST_CONTRACT.md).

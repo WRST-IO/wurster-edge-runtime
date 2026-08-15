@@ -1,0 +1,23 @@
+diff --git a/lib/src/napi_text.cc b/lib/src/napi_text.cc
+index 8dbb831..bd7df63 100644
+--- a/lib/src/napi_text.cc
++++ b/lib/src/napi_text.cc
+@@ -32,10 +32,14 @@ std::vector<uint64_t> bigint_words_from_decimal_string(const char* decimal,
+ 
+     unsigned carry = static_cast<unsigned>(*cursor - '0');
+     for (std::size_t i = 0; i < words.size(); ++i) {
+-      unsigned __int128 next =
+-          static_cast<unsigned __int128>(words[i]) * 10 + carry;
+-      words[i] = static_cast<uint64_t>(next);
+-      carry = static_cast<unsigned>(next >> 64);
++      // MSVC has no unsigned __int128. Split the 64-bit word into two
++      // 32-bit limbs; multiplying either limb by ten cannot overflow uint64_t.
++      // This produces the same low word and 0..9 carry on every host compiler.
++      constexpr uint64_t kLowMask = 0xffffffffULL;
++      const uint64_t low = (words[i] & kLowMask) * 10 + carry;
++      const uint64_t high = (words[i] >> 32) * 10 + (low >> 32);
++      words[i] = (high << 32) | (low & kLowMask);
++      carry = static_cast<unsigned>(high >> 32);
+     }
+     if (carry != 0 || words.empty()) {
+       words.push_back(carry);

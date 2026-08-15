@@ -40,6 +40,63 @@ require_linux_amd64() {
   fi
 }
 
+require_darwin_arm64() {
+  local kernel machine
+  kernel="$(uname -s)"
+  machine="$(uname -m)"
+  if [[ "$kernel" != "Darwin" || "$machine" != "arm64" ]]; then
+    printf 'error: supported build host is Darwin arm64, got %s %s\n' "$kernel" "$machine" >&2
+    exit 1
+  fi
+}
+
+require_darwin_amd64() {
+  local kernel machine
+  kernel="$(uname -s)"
+  machine="$(uname -m)"
+  if [[ "$kernel" != "Darwin" || "$machine" != "x86_64" ]]; then
+    printf 'error: supported build host is Darwin x86_64, got %s %s\n' "$kernel" "$machine" >&2
+    exit 1
+  fi
+}
+
+host_target() {
+  case "$(uname -s):$(uname -m)" in
+    Linux:x86_64) printf '%s\n' linux-amd64 ;;
+    Darwin:arm64) printf '%s\n' darwin-arm64 ;;
+    Darwin:x86_64) printf '%s\n' darwin-amd64 ;;
+    *)
+      printf 'error: unsupported host: %s %s\n' "$(uname -s)" "$(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+verify_v8_version() {
+  local include_root="$1"
+  local expected="$2"
+  python3 - "$include_root/v8-version.h" "$expected" <<'PY'
+import pathlib
+import re
+import sys
+
+header = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+expected = tuple(int(part) for part in sys.argv[2].split("."))
+names = ("V8_MAJOR_VERSION", "V8_MINOR_VERSION", "V8_BUILD_NUMBER", "V8_PATCH_LEVEL")
+actual = tuple(int(re.search(rf"^#define {name} (\d+)$", header, re.MULTILINE).group(1)) for name in names)
+if actual != expected:
+    raise SystemExit(f"V8 header version mismatch: expected {expected}, found {actual}")
+PY
+}
+
 checkout_pinned_repo() {
   local repository="$1"
   local commit="$2"

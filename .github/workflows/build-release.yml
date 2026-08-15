@@ -8,7 +8,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: runtime-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   linux-amd64:
@@ -42,22 +46,51 @@ jobs:
       - name: Check repository contracts
         run: ./scripts/check.sh
 
-      - name: Build and verify bundle
+      - name: Build and verify Linux amd64 bundle
         run: ./scripts/build-linux-amd64.sh
 
-      - name: Repeat verification without a network namespace
+      - name: Repeat Linux verification without a network namespace
         shell: bash
         run: |
           set -euo pipefail
           sudo --preserve-env=PATH unshare --net -- \
-            ./scripts/verify-bundle.sh out/wurster-edge-runtime-linux-amd64
+            ./scripts/verify-archive.sh \
+              out/wurster-edge-runtime-linux-amd64.tar.gz linux-amd64
 
-      - name: Verify published archive checksum
+      - name: Verify extracted Linux and core archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/verify-archive.sh \
+            out/wurster-edge-runtime-linux-amd64.tar.gz linux-amd64
+          ./scripts/verify-core-archive.sh \
+            out/wurster-edge-runtime-core.tar.gz
+
+      - name: Verify Linux archive checksum
         shell: bash
         run: |
           set -euo pipefail
           cd out
-          sha256sum --check SHA256SUMS
+          sha256sum --check wurster-edge-runtime-linux-amd64.tar.gz.sha256
+          sha256sum --check wurster-edge-runtime-core.tar.gz.sha256
+
+      - name: Upload platform-neutral WASIX guest for host builds
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: edge-wasix-guest
+          path: build/src/edgejs/build-wasix/edgejs.wasm
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload platform-neutral core release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wurster-edge-runtime-core
+          path: |
+            out/wurster-edge-runtime-core.tar.gz
+            out/wurster-edge-runtime-core.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
 
       - name: Upload complete Linux amd64 bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -65,19 +98,381 @@ jobs:
           name: wurster-edge-runtime-linux-amd64
           path: |
             out/wurster-edge-runtime-linux-amd64.tar.gz
-            out/SHA256SUMS
+            out/wurster-edge-runtime-linux-amd64.tar.gz.sha256
           if-no-files-found: error
           compression-level: 0
 
-      - name: Publish tagged GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+  darwin-arm64:
+    needs: linux-amd64
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      JOBS: '4'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - name: Check out runtime repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Require Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install automake binaryen cmake gnu-tar ninja pkg-config protobuf shellcheck xz zstd
+          rustup toolchain install 1.95 --profile minimal
+
+      - name: Select pinned Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - name: Check repository contracts
+        run: ./scripts/check.sh
+
+      - name: Download the tested platform-neutral WASIX guest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: edge-wasix-guest
+          path: build/guest
+
+      - name: Build and verify macOS Apple Silicon bundle
+        run: ./scripts/build-darwin-arm64.sh build/guest/edgejs.wasm
+
+      - name: Verify macOS archive checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd out
+          shasum -a 256 -c wurster-edge-runtime-darwin-arm64.tar.gz.sha256
+
+      - name: Verify extracted macOS Apple Silicon archive
+        run: ./scripts/verify-archive.sh out/wurster-edge-runtime-darwin-arm64.tar.gz darwin-arm64
+
+      - name: Upload complete macOS Apple Silicon bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wurster-edge-runtime-darwin-arm64
+          path: |
+            out/wurster-edge-runtime-darwin-arm64.tar.gz
+            out/wurster-edge-runtime-darwin-arm64.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+
+  darwin-amd64:
+    needs: linux-amd64
+    runs-on: macos-15-intel
+    timeout-minutes: 300
+    env:
+      JOBS: '4'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - name: Check out runtime repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Require native Intel runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = x86_64
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install automake binaryen cmake gnu-tar ninja pkg-config protobuf shellcheck xz zstd
+          rustup toolchain install 1.95 --profile minimal
+
+      - name: Select pinned Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - name: Check repository contracts
+        run: ./scripts/check.sh
+
+      - name: Restore cached macOS Intel V8 SDK
+        id: v8_darwin_amd64_cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: build/v8-13.6.233.17-darwin-amd64
+          key: wurster-v8-darwin-amd64-${{ hashFiles('runtime.lock.json', 'scripts/build-v8-darwin-amd64.sh') }}
+
+      - name: Build pinned macOS Intel V8 SDK
+        run: ./scripts/build-v8-darwin-amd64.sh
+
+      - name: Save macOS Intel V8 SDK cache
+        if: steps.v8_darwin_amd64_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: build/v8-13.6.233.17-darwin-amd64
+          key: wurster-v8-darwin-amd64-${{ hashFiles('runtime.lock.json', 'scripts/build-v8-darwin-amd64.sh') }}
+
+      - name: Download the tested platform-neutral WASIX guest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: edge-wasix-guest
+          path: build/guest
+
+      - name: Build and verify native macOS Intel bundle
+        run: ./scripts/build-darwin-amd64.sh build/guest/edgejs.wasm
+
+      - name: Verify macOS Intel archive checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd out
+          shasum -a 256 -c wurster-edge-runtime-darwin-amd64.tar.gz.sha256
+
+      - name: Verify extracted native macOS Intel archive
+        run: ./scripts/verify-archive.sh out/wurster-edge-runtime-darwin-amd64.tar.gz darwin-amd64
+
+      - name: Upload complete macOS Intel bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wurster-edge-runtime-darwin-amd64
+          path: |
+            out/wurster-edge-runtime-darwin-amd64.tar.gz
+            out/wurster-edge-runtime-darwin-amd64.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+
+  windows-amd64:
+    needs: linux-amd64
+    runs-on: windows-2022
+    timeout-minutes: 240
+    env:
+      JOBS: '4'
+      CARGO_INCREMENTAL: '0'
+      RUSTUP_TOOLCHAIN: '1.95'
+      GYP_MSVS_VERSION: '2022'
+    steps:
+      - name: Check out runtime repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Configure MSVC amd64 build environment
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+          vsversion: '2022'
+
+      - name: Require Windows amd64 runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not [Environment]::Is64BitOperatingSystem -or
+              $env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
+            throw "Expected Windows amd64 runner"
+          }
+          if ($env:VisualStudioVersion -notmatch '^17\.') {
+            throw "V8 13.6 requires Visual Studio 2022 (17.x), got $env:VisualStudioVersion"
+          }
+          if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+            throw "Visual Studio 2022 x64 cl.exe is not available"
+          }
+          if ($env:VSCMD_ARG_TGT_ARCH -ne 'x64' -or
+              -not $env:VSINSTALLDIR -or -not $env:VCToolsInstallDir -or
+              -not $env:WindowsSdkDir) {
+            throw "Incomplete Visual Studio 2022 x64 build environment"
+          }
+          foreach ($tool in @('link.exe', 'lib.exe')) {
+            if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+              throw "Visual Studio 2022 x64 tool is unavailable: $tool"
+            }
+          }
+          if ($env:GYP_MSVS_VERSION -ne '2022') {
+            throw "Pinned V8 build requires GYP_MSVS_VERSION=2022"
+          }
+          git config --global core.longpaths true
+          rustup toolchain install 1.95 --profile minimal
+          rustc --version
+          cargo --version
+          cmake --version
+          ninja --version
+
+      - name: Check repository contracts
+        shell: bash
+        run: ./scripts/check.sh
+
+      - name: Probe Windows CMake and native Ninja before V8
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          $ninja = (Get-Command ninja.exe -ErrorAction Stop).Source
+          if ($ninja -match '[\\/]depot_tools[\\/]') {
+            throw "Expected runner-native ninja.exe, got depot_tools Ninja: $ninja"
+          }
+          $probe = Join-Path $env:RUNNER_TEMP "wurster-cmake-ninja-probe"
+          if (Test-Path -LiteralPath $probe) {
+            Remove-Item -LiteralPath $probe -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path $probe | Out-Null
+          @'
+          cmake_minimum_required(VERSION 3.20)
+          project(wurster_ninja_probe LANGUAGES C CXX)
+          '@ | Set-Content -LiteralPath (Join-Path $probe "CMakeLists.txt") -Encoding utf8
+          try {
+            & $ninja --version
+            & cmake -S $probe -B (Join-Path $probe "build") -G Ninja `
+              "-DCMAKE_MAKE_PROGRAM:FILEPATH=$ninja"
+          } finally {
+            Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Restore cached Windows V8 SDK
+        id: v8_windows_amd64_cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: build/v8-13.6.233.17-windows-amd64
+          key: wurster-v8-windows-amd64-${{ hashFiles('runtime.lock.json', 'scripts/build-v8-windows-amd64.ps1') }}
+
+      - name: Build pinned Windows V8 SDK
+        shell: pwsh
+        run: ./scripts/build-v8-windows-amd64.ps1
+
+      - name: Save Windows V8 SDK cache
+        if: steps.v8_windows_amd64_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: build/v8-13.6.233.17-windows-amd64
+          key: wurster-v8-windows-amd64-${{ hashFiles('runtime.lock.json', 'scripts/build-v8-windows-amd64.ps1') }}
+
+      - name: Download the tested platform-neutral WASIX guest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: edge-wasix-guest
+          path: build/guest
+
+      - name: Build and verify Windows amd64 bundle
+        shell: pwsh
+        run: ./scripts/build-windows-amd64.ps1 -EdgeWasm build/guest/edgejs.wasm
+
+      - name: Verify Windows archive checksum
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archive = "out/wurster-edge-runtime-windows-amd64.zip"
+          $expected = (Get-Content "$archive.sha256").Split()[0]
+          $actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Windows archive checksum mismatch" }
+
+      - name: Verify extracted Windows archive with outbound traffic blocked
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          ./scripts/verify-archive-windows.ps1 `
+            -Archive out/wurster-edge-runtime-windows-amd64.zip `
+            -BlockNetwork
+
+      - name: Upload complete Windows amd64 bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wurster-edge-runtime-windows-amd64
+          path: |
+            out/wurster-edge-runtime-windows-amd64.zip
+            out/wurster-edge-runtime-windows-amd64.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-amd64, darwin-arm64, darwin-amd64, windows-amd64]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out runtime repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Require tag to match the bundle version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "v$(<VERSION)"
+
+      - name: Download Linux amd64 release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: wurster-edge-runtime-linux-amd64
+          path: release-assets
+
+      - name: Download platform-neutral core release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: wurster-edge-runtime-core
+          path: release-assets
+
+      - name: Download macOS Apple Silicon release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: wurster-edge-runtime-darwin-arm64
+          path: release-assets
+
+      - name: Download macOS Intel release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: wurster-edge-runtime-darwin-amd64
+          path: release-assets
+
+      - name: Download Windows amd64 release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: wurster-edge-runtime-windows-amd64
+          path: release-assets
+
+      - name: Build one authoritative checksum file
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum wurster-edge-runtime-core.tar.gz \
+            wurster-edge-runtime-linux-amd64.tar.gz \
+            wurster-edge-runtime-darwin-arm64.tar.gz \
+            wurster-edge-runtime-darwin-amd64.tar.gz \
+            wurster-edge-runtime-windows-amd64.zip > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Verify release-set compatibility and byte-identical guest
+        run: python3 scripts/verify-release-set.py release-assets
+
+      - name: Upload complete release set as a draft
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "${GITHUB_REF_NAME}" \
-            out/wurster-edge-runtime-linux-amd64.tar.gz \
-            out/SHA256SUMS \
+          gh release create "$GITHUB_REF_NAME" \
+            release-assets/wurster-edge-runtime-core.tar.gz \
+            release-assets/wurster-edge-runtime-linux-amd64.tar.gz \
+            release-assets/wurster-edge-runtime-darwin-arm64.tar.gz \
+            release-assets/wurster-edge-runtime-darwin-amd64.tar.gz \
+            release-assets/wurster-edge-runtime-windows-amd64.zip \
+            release-assets/SHA256SUMS \
             --verify-tag \
+            --draft \
+            --latest=false \
+            --title "Wurster Edge Runtime $GITHUB_REF_NAME" \
             --generate-notes
+
+      - name: Publish the complete release atomically
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false
+
+      - name: Prove anonymous public access to every release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          for asset in \
+            wurster-edge-runtime-core.tar.gz \
+            wurster-edge-runtime-linux-amd64.tar.gz \
+            wurster-edge-runtime-darwin-arm64.tar.gz \
+            wurster-edge-runtime-darwin-amd64.tar.gz \
+            wurster-edge-runtime-windows-amd64.zip \
+            SHA256SUMS; do
+            curl --fail --silent --show-error --location --head "$base/$asset" >/dev/null
+          done
