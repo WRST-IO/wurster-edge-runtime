@@ -40,6 +40,13 @@ for path in sorted((root / "scripts").glob("*.ps1")):
 PY
 bash -n "$root"/scripts/*.sh
 
+for patch in "$root"/patches/*/*.patch; do
+  if ! git apply --numstat "$patch" >/dev/null; then
+    printf 'error: invalid patch syntax: %s\n' "$patch" >&2
+    exit 1
+  fi
+done
+
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck "$root"/scripts/*.sh
 else

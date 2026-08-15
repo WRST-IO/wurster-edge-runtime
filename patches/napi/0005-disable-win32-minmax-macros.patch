@@ -1,7 +1,7 @@
 diff --git a/build.rs b/build.rs
 --- a/build.rs
 +++ b/build.rs
-@@ -88,6 +88,9 @@ fn main() {
+@@ -90,5 +90,8 @@ fn main() {
  
      let mut build = cc::Build::new();
 +    if env::var("CARGO_CFG_TARGET_OS").unwrap_or_default() == "windows" {
@@ -13,7 +13,7 @@ diff --git a/build.rs b/build.rs
 diff --git a/v8/CMakeLists.txt b/v8/CMakeLists.txt
 --- a/v8/CMakeLists.txt
 +++ b/v8/CMakeLists.txt
-@@ -76,6 +76,9 @@ target_compile_definitions(napi_v8
+@@ -77,5 +77,8 @@ target_compile_definitions(napi_v8
      $<$<BOOL:${NAPI_ENABLE_LIFETIME_STRING_SYMBOL_DUMP}>:NAPI_ENABLE_LIFETIME_STRING_SYMBOL_DUMP=1>
  )
 +if(WIN32)
