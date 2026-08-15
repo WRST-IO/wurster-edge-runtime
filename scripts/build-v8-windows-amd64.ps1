@@ -89,14 +89,144 @@ function Assert-V8Version {
     }
 }
 
+function Assert-CompleteV8Sdk {
+    param([string]$SdkRoot)
+
+    foreach ($RelativePath in @(
+        "include/v8.h",
+        "include/v8-version.h",
+        "include/cppgc/allocation.h",
+        "include/wasm-c-api/wasm.h",
+        "lib/v8.lib"
+    )) {
+        if (-not (Test-Path -LiteralPath (Join-Path $SdkRoot $RelativePath))) {
+            throw "Windows V8 SDK is incomplete: missing $RelativePath"
+        }
+    }
+    Assert-V8Version (Join-Path $SdkRoot "include")
+}
+
+function Provision-PinnedReleaseSdk {
+    # Release 11.9.7 was produced from exactly the builder and V8 revisions
+    # pinned by runtime.lock.json. Its Windows archive contains the built
+    # wee8/v8 library and patched wasm C API header, but its upstream packaging
+    # omitted public cppgc headers. Hydrate the complete public include tree
+    # from the exact V8 commit instead of recompiling V8 for several hours.
+    $AssetRelease = "11.9.7"
+    $AssetSha256 = "2aee8b6c3e8cecae2ce0325ac01b9bcaea4bef49e8f2aac599e1729d60c17285"
+    $AssetBuilderCommit = "844d01dc10edaa0461715f484e06b004f1fd023e"
+    $AssetV8Commit = "b0a55a7dad7f536cce1f9aaddba89894c8533946"
+
+    if ($Version -ne "13.6.233.17" -or
+        $Lock.toolchain.v8.upstream_asset_release -ne $AssetRelease -or
+        $Lock.sources.v8_custom_builds.commit -ne $AssetBuilderCommit -or
+        $ExpectedCommit -ne $AssetV8Commit) {
+        throw "Pinned Windows V8 release provisioner no longer matches runtime.lock.json; update its audited asset pins before continuing"
+    }
+
+    foreach ($Tool in @("curl.exe", "tar.exe", "git.exe")) {
+        if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) {
+            throw "Windows V8 release provisioner requires $Tool"
+        }
+    }
+
+    $OutputParent = Split-Path -Parent $Output
+    New-Item -ItemType Directory -Force -Path $OutputParent | Out-Null
+    $DownloadRoot = Join-Path $Root "build/downloads"
+    New-Item -ItemType Directory -Force -Path $DownloadRoot | Out-Null
+    $Archive = Join-Path $DownloadRoot "v8-$AssetRelease-windows-amd64.tar.xz"
+    $AssetUrl = "https://github.com/wasmerio/v8-custom-builds/releases/download/$AssetRelease/v8-windows-amd64.tar.xz"
+
+    if (Test-Path -LiteralPath $Archive) {
+        $ExistingSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
+        if ($ExistingSha -ne $AssetSha256) {
+            Remove-Item -LiteralPath $Archive -Force
+        }
+    }
+    if (-not (Test-Path -LiteralPath $Archive)) {
+        $Partial = "$Archive.partial"
+        Remove-Item -LiteralPath $Partial -Force -ErrorAction SilentlyContinue
+        try {
+            & curl.exe --fail --location --proto "=https" --tlsv1.2 --retry 3 `
+                --output $Partial $AssetUrl
+            $DownloadedSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Partial).Hash.ToLowerInvariant()
+            if ($DownloadedSha -ne $AssetSha256) {
+                throw "Windows V8 release asset checksum mismatch: expected $AssetSha256, got $DownloadedSha"
+            }
+            Move-Item -LiteralPath $Partial -Destination $Archive
+        } finally {
+            Remove-Item -LiteralPath $Partial -Force -ErrorAction SilentlyContinue
+        }
+    }
+    $ActualSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
+    if ($ActualSha -ne $AssetSha256) {
+        throw "Windows V8 release asset checksum mismatch: expected $AssetSha256, got $ActualSha"
+    }
+
+    $Stage = "$Output.staging"
+    if (Test-Path -LiteralPath $Stage) {
+        Remove-Item -LiteralPath $Stage -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $Stage | Out-Null
+
+    $HeaderRootBase = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $OutputParent }
+    $HeaderRoot = Join-Path $HeaderRootBase "wurster-v8-public-headers-$Version"
+    if (Test-Path -LiteralPath $HeaderRoot) {
+        Remove-Item -LiteralPath $HeaderRoot -Recurse -Force
+    }
+
+    try {
+        & tar.exe -xJf $Archive -C $Stage
+        foreach ($RelativePath in @("include/v8.h", "include/wasm-c-api/wasm.h", "lib/v8.lib")) {
+            if (-not (Test-Path -LiteralPath (Join-Path $Stage $RelativePath))) {
+                throw "Pinned upstream Windows V8 archive is missing expected payload: $RelativePath"
+            }
+        }
+        Assert-V8Version (Join-Path $Stage "include")
+
+        New-Item -ItemType Directory -Force -Path $HeaderRoot | Out-Null
+        & git init -q $HeaderRoot
+        & git -C $HeaderRoot remote add origin $Lock.sources.v8.repository
+        & git -C $HeaderRoot sparse-checkout init --cone
+        & git -C $HeaderRoot sparse-checkout set include
+        & git -C $HeaderRoot fetch --depth 1 --filter=blob:none origin $ExpectedCommit
+        & git -C $HeaderRoot checkout -q --detach FETCH_HEAD
+        if ((& git -C $HeaderRoot rev-parse HEAD) -ne $ExpectedCommit) {
+            throw "failed to hydrate public V8 headers from pinned commit $ExpectedCommit"
+        }
+
+        Copy-Item (Join-Path $HeaderRoot "include/*") (Join-Path $Stage "include") -Recurse -Force
+        Assert-CompleteV8Sdk $Stage
+
+        if (Test-Path -LiteralPath $Output) {
+            throw "refusing to overwrite existing V8 output: $Output"
+        }
+        Move-Item -LiteralPath $Stage -Destination $Output
+        Assert-CompleteV8Sdk $Output
+    } finally {
+        Remove-Item -LiteralPath $HeaderRoot -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $Stage) {
+            Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 if ((Test-Path -LiteralPath (Join-Path $Output "include/v8.h")) -and
+    (Test-Path -LiteralPath (Join-Path $Output "include/cppgc/allocation.h")) -and
     (Test-Path -LiteralPath (Join-Path $Output "lib/v8.lib"))) {
-    Assert-V8Version (Join-Path $Output "include")
+    Assert-CompleteV8Sdk $Output
     exit 0
 }
 if (Test-Path -LiteralPath $Output) {
     throw "incomplete V8 output exists: $Output"
 }
+
+$ForceSourceBuild = [Environment]::GetEnvironmentVariable("WURSTER_FORCE_V8_SOURCE_BUILD") -eq "1"
+if (-not $ForceSourceBuild) {
+    Provision-PinnedReleaseSdk
+    exit 0
+}
+Write-Warning "WURSTER_FORCE_V8_SOURCE_BUILD=1: bypassing pinned release SDK and compiling V8 from source"
 
 Checkout-PinnedRepository $Lock.sources.v8_custom_builds.repository `
     $Lock.sources.v8_custom_builds.commit $BuilderRoot
@@ -208,10 +338,7 @@ Get-ChildItem (Join-Path $Stage "include") -Recurse -File |
 Copy-Item (Join-Path $V8Root "third_party/wasm-api/wasm.h") `
     (Join-Path $Stage "include/wasm-c-api/wasm.h")
 Copy-Item (Join-Path $BuildRoot "obj/wee8.lib") (Join-Path $Stage "lib/v8.lib")
-Assert-V8Version (Join-Path $Stage "include")
+Assert-CompleteV8Sdk $Stage
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Output) | Out-Null
 Move-Item -LiteralPath $Stage -Destination $Output
-
-if (-not (Test-Path -LiteralPath (Join-Path $Output "include/v8.h")) -or
-    -not (Test-Path -LiteralPath (Join-Path $Output "lib/v8.lib"))) {
-    throw "V8 source build did not produce the expected Windows SDK"
-}
+Assert-CompleteV8Sdk $Output
