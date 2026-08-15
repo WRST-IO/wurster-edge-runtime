@@ -1,0 +1,16 @@
+diff --git a/v8/src/internal/napi_factory.h b/v8/src/internal/napi_factory.h
+--- a/v8/src/internal/napi_factory.h
++++ b/v8/src/internal/napi_factory.h
+@@ -131,7 +131,11 @@ namespace v8impl::detail
+     napi_allocator__<napi_external_wrapper__, napi_env__> napi_external_wrapper_allocator_;
+     napi_allocator__<napi_env_cleanup_hook__, napi_env__> napi_env_cleanup_hook_allocator_;
+     napi_allocator__<napi_buffer_record__, napi_env__> napi_buffer_record_allocator_;
+-    napi_allocator__<ModuleWrapRecord, napi_env__> module_wrap_record_allocator_;
++    // The default 64-slot slab rounds ModuleWrapRecord up to a 16384-byte
++    // block alignment. MSVC only accepts explicit alignments up to 8192 bytes.
++    // Keep this large record in smaller slabs; allocation semantics are
++    // unchanged and the allocator's power-of-two block lookup remains valid.
++    napi_allocator__<ModuleWrapRecord, napi_env__, 16> module_wrap_record_allocator_;
+     napi_allocator__<SerializerContext, napi_env__> serializer_context_allocator_;
+     napi_allocator__<DeserializerContext, napi_env__> deserializer_context_allocator_;
+   };
