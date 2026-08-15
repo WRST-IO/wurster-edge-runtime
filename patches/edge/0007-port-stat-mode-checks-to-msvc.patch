@@ -1,0 +1,70 @@
+diff --git a/src/edge_fs.cc b/src/edge_fs.cc
+--- a/src/edge_fs.cc
++++ b/src/edge_fs.cc
+@@ -22,6 +22,14 @@
+ namespace {
+ 
++bool IsDirectoryMode(uint64_t mode) {
++#if defined(_WIN32)
++  return (mode & _S_IFMT) == _S_IFDIR;
++#else
++  return S_ISDIR(mode);
++#endif
++}
++
+ void ThrowUVExceptionCopyFile(napi_env env, int errorno, const char* src,
+                               const char* dest);
+ 
+@@ -512,7 +520,7 @@ bool MkdirpSync(std::string path, int mode, std::string* first_path,
+           int stat_err = uv_fs_stat(nullptr, &req, next_path.c_str(), nullptr);
+           const uv_stat_t statbuf = req.statbuf;
+           uv_fs_req_cleanup(&req);
+-          if (stat_err == 0 && !S_ISDIR(statbuf.st_mode)) {
++          if (stat_err == 0 && !IsDirectoryMode(statbuf.st_mode)) {
+             *out_err = (orig_err == UV_EEXIST && !stack.empty()) ? UV_ENOTDIR : UV_EEXIST;
+             return false;
+           }
+diff --git a/src/internal_binding/binding_fs.cc b/src/internal_binding/binding_fs.cc
+--- a/src/internal_binding/binding_fs.cc
++++ b/src/internal_binding/binding_fs.cc
+@@ -42,6 +42,22 @@ namespace {
+ constexpr size_t kFsStatsLength = 18;
+ constexpr size_t kFsStatFsLength = 7;
+ 
++bool IsDirectoryMode(uint64_t mode) {
++#if defined(_WIN32)
++  return (mode & _S_IFMT) == _S_IFDIR;
++#else
++  return S_ISDIR(mode);
++#endif
++}
++
++bool IsFifoMode(uint64_t mode) {
++#if defined(_WIN32)
++  return (mode & _S_IFMT) == _S_IFIFO;
++#else
++  return S_ISFIFO(mode);
++#endif
++}
++
+ void ClearPendingException(napi_env env) {
+   if (env == nullptr) return;
+   // TODO: Make napi_get_and_clear_last_exception() match upstream Node so
+@@ -1271,7 +1287,7 @@ bool ShouldDelayOpenCompletion(AsyncFsReq* async_req, int result) {
+   const int stat_result = uv_fs_fstat(nullptr, &stat_req, result, nullptr);
+   bool is_fifo = false;
+   if (stat_result == 0) {
+-    is_fifo = S_ISFIFO(stat_req.statbuf.st_mode);
++    is_fifo = IsFifoMode(stat_req.statbuf.st_mode);
+   }
+   uv_fs_req_cleanup(&stat_req);
+   return is_fifo;
+@@ -3066,7 +3082,7 @@ napi_value FsMkdir(napi_env env, napi_callback_info info) {
+             err = uv_fs_stat(nullptr, &uv_req, next_path.c_str(), nullptr);
+             const uv_stat_t statbuf = uv_req.statbuf;
+             uv_fs_req_cleanup(&uv_req);
+-            if (err == 0 && !S_ISDIR(statbuf.st_mode)) {
++            if (err == 0 && !IsDirectoryMode(statbuf.st_mode)) {
+               err = (orig_err == UV_EEXIST && !stack.empty()) ? UV_ENOTDIR : UV_EEXIST;
+             } else if (err == 0) {
+               err = 0;
