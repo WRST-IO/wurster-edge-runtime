@@ -75,6 +75,16 @@ try {
         -DCMAKE_C_FLAGS=/utf-8 `
         "-DCMAKE_CXX_FLAGS=/utf-8 /Zc:__cplusplus /EHsc" `
         -DEDGE_BUILD_NAPI_TESTS=OFF
+
+    # Compile the translation units that have exposed MSVC-only porting bugs
+    # before launching the full ~2k-object graph. Ninja reuses these objects in
+    # the full build, so a passing build pays essentially no duplicate work.
+    Write-Host ">>> Preflighting Windows-sensitive C++ translation units"
+    & $SystemNinja -C $EdgeBuild `
+        "napi-v8/CMakeFiles/napi_v8.dir/src/js_native_api_v8.cc.obj" `
+        "napi-v8/CMakeFiles/napi_v8.dir/src/unofficial_napi.cc.obj" `
+        "CMakeFiles/edge_ncrypto.dir/deps/ncrypto/ncrypto.cc.obj"
+
     & cmake --build $EdgeBuild --parallel $Jobs
 
     Push-Location (Join-Path $SourceRoot "wasmer")

@@ -1,0 +1,24 @@
+diff --git a/build.rs b/build.rs
+--- a/build.rs
++++ b/build.rs
+@@ -88,6 +88,9 @@ fn main() {
+ 
+     let mut build = cc::Build::new();
++    if env::var("CARGO_CFG_TARGET_OS").unwrap_or_default() == "windows" {
++        build.define("NOMINMAX", Some("1"));
++    }
+     build
+         .cpp(true)
+         .flag_if_supported("-std=c++20")
+diff --git a/v8/CMakeLists.txt b/v8/CMakeLists.txt
+--- a/v8/CMakeLists.txt
++++ b/v8/CMakeLists.txt
+@@ -76,6 +76,9 @@ target_compile_definitions(napi_v8
+     $<$<BOOL:${NAPI_ENABLE_LIFETIME_STRING_SYMBOL_DUMP}>:NAPI_ENABLE_LIFETIME_STRING_SYMBOL_DUMP=1>
+ )
++if(WIN32)
++  target_compile_definitions(napi_v8 PRIVATE NOMINMAX)
++endif()
+ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+   target_compile_options(napi_v8 PRIVATE -fno-rtti)
+ endif()
