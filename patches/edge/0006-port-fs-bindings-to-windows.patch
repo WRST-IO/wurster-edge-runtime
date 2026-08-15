@@ -1,0 +1,49 @@
+diff --git a/src/edge_process.cc b/src/edge_process.cc
+--- a/src/edge_process.cc
++++ b/src/edge_process.cc
+@@ -65,6 +65,5 @@
+ #include <sys/stat.h>
+ #define umask _umask
+ using mode_t = int;
+-extern char** _environ;
+ #elif defined(__APPLE__)
+ #include <dlfcn.h>
+diff --git a/src/internal_binding/binding_constants.cc b/src/internal_binding/binding_constants.cc
+--- a/src/internal_binding/binding_constants.cc
++++ b/src/internal_binding/binding_constants.cc
+@@ -3,6 +3,8 @@
+ #include <limits>
+ #include <fcntl.h>
+ #include <sys/stat.h>
++#if !defined(_WIN32)
+ #include <unistd.h>
++#endif
+ 
+ #include "brotli/decode.h"
+diff --git a/src/internal_binding/binding_fs.cc b/src/internal_binding/binding_fs.cc
+--- a/src/internal_binding/binding_fs.cc
++++ b/src/internal_binding/binding_fs.cc
+@@ -16,7 +16,11 @@
+ #include <sstream>
+ #include <string>
+ #include <sys/stat.h>
++#if defined(_WIN32)
++#include <io.h>
++#else
+ #include <unistd.h>
++#endif
+ #include <unordered_map>
+ #include <unordered_set>
+ #include <vector>
+@@ -2206,7 +2210,11 @@ void FileHandleFinalize(napi_env env, void* data, void* /*hint*/) {
+   if (wrap == nullptr) return;
+   if (wrap->fd >= 0 && !wrap->closed && !wrap->closing) {
+     const int fd = wrap->fd;
++#if defined(_WIN32)
++    const int rc = _close(fd);
++#else
+     const int rc = ::close(fd);
++#endif
+     if (auto* environment = EdgeEnvironmentGet(env); environment != nullptr) {
+       const int close_status = rc == 0 ? 0 : -(errno != 0 ? errno : UV_EIO);
+       environment->QueueFileHandleGcWarning(fd, close_status);
