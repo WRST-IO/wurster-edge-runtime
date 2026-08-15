@@ -1,7 +1,7 @@
 diff --git a/src/edge_fs.cc b/src/edge_fs.cc
 --- a/src/edge_fs.cc
 +++ b/src/edge_fs.cc
-@@ -22,6 +22,14 @@
+@@ -22,5 +22,13 @@
  namespace {
  
 +bool IsDirectoryMode(uint64_t mode) {
