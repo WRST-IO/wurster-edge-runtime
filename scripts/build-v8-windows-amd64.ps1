@@ -174,7 +174,10 @@ function Hydrate-PinnedCppgcHeaders {
         Write-Host "Listing $RemoteDirectory"
         $ApiUrl = "https://api.github.com/repos/v8/v8/contents/$RemoteDirectory`?ref=$ExpectedCommit"
         $RequestTimeout = [Math]::Max(5, [Math]::Min(60, $Remaining))
-        $Items = @(Invoke-RestMethod -Uri $ApiUrl -Headers $ApiHeaders -TimeoutSec $RequestTimeout)
+        # Invoke-RestMethod already exposes a JSON array as an Object[] value.
+        # Wrapping it in @() nests that array, so property enumeration below
+        # collapses all returned paths into one invalid space-separated string.
+        $Items = Invoke-RestMethod -Uri $ApiUrl -Headers $ApiHeaders -TimeoutSec $RequestTimeout
 
         foreach ($Item in $Items) {
             if ($Item.type -eq "dir") {
